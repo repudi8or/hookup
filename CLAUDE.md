@@ -148,6 +148,39 @@ This project uses **GitHub Flow** — the simplest and most streamlined branchin
 - PRs should be small and focused — one concern per PR
 - Delete feature branches after merging
 
+## CI / CD
+
+Three GitHub Actions workflows run automatically:
+
+### `ci.yml` — runs on every branch push (except main)
+- `flutter analyze` — static analysis
+- `flutter test --coverage` — full test suite with coverage report
+- Uploads coverage as a build artifact
+
+### `build.yml` — runs on every PR targeting main
+- Runs analyze + test first; artifacts only build if they pass
+- **Android**: builds a debug APK, uploaded as a PR artifact (ready to sideload)
+- **iOS**: builds an unsigned `.ipa`, uploaded as a PR artifact
+
+### `release.yml` — runs on every merge to main
+- Reads the semver version from `pubspec.yaml` (e.g. `1.2.3` from `version: 1.2.3+4`)
+- Skips if a git tag for that version already exists (idempotent)
+- Builds a release APK and unsigned iOS IPA
+- Creates a GitHub Release tagged `vX.Y.Z` with auto-generated release notes and both artifacts attached
+
+### Versioning
+Versions follow **semver** and are set in `pubspec.yaml`:
+```yaml
+version: 1.2.3+4   # 1.2.3 = semver published to GitHub, +4 = build number
+```
+To cut a new release, bump the version in `pubspec.yaml` as part of your PR. On merge, the release workflow picks it up automatically.
+
+### iOS signed releases (future)
+The iOS artifact is currently unsigned. To produce a TestFlight-deployable IPA, add the following to GitHub secrets and update `release.yml`:
+- `APPLE_CERTIFICATE` — base64-encoded `.p12` signing certificate
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_PROVISIONING_PROFILE` — base64-encoded `.mobileprovision`
+
 ## Development Environment
 
 **Write the tests first. Always.**
