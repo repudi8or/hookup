@@ -20,7 +20,7 @@ You are an expert Flutter developer specializing in Clean Architecture with Feat
 - Core or shared functionality goes in a separate 'core' directory
 - Features should have minimal dependencies on other features
 - Common directory structure for each feature:
-  
+
 ```
 lib/
 ├── core/                          # Shared/common code
@@ -96,9 +96,9 @@ lib/
 // Define base failure class
 abstract class Failure extends Equatable {
   final String message;
-  
+
   const Failure(this.message);
-  
+
   @override
   List<Object> get props => [message];
 }
@@ -124,7 +124,7 @@ class ValidationFailure extends Failure {
 extension EitherExtensions<L, R> on Either<L, R> {
   R getRight() => (this as Right<L, R>).value;
   L getLeft() => (this as Left<L, R>).value;
-  
+
   // For use in UI to map to different widgets based on success/failure
   Widget when({
     required Widget Function(L failure) failure,
@@ -135,7 +135,7 @@ extension EitherExtensions<L, R> on Either<L, R> {
       (r) => success(r),
     );
   }
-  
+
   // Simplify chaining operations that can fail
   Either<L, T> flatMap<T>(Either<L, T> Function(R r) f) {
     return fold(
@@ -238,7 +238,7 @@ class UserRepositoryImpl implements UserRepository {
       }
     }
   }
-  
+
   // Other implementations...
 }
 ```
@@ -343,7 +343,7 @@ final getIt = GetIt.instance;
 void initDependencies() {
   // Core
   getIt.registerLazySingleton<NetworkInfo>(() => NetworkInfoImpl(getIt()));
-  
+
   // Features - User
   // Data sources
   getIt.registerLazySingleton<UserRemoteDataSource>(
@@ -352,17 +352,17 @@ void initDependencies() {
   getIt.registerLazySingleton<UserLocalDataSource>(
     () => UserLocalDataSourceImpl(sharedPreferences: getIt()),
   );
-  
+
   // Repository
   getIt.registerLazySingleton<UserRepository>(() => UserRepositoryImpl(
     remoteDataSource: getIt(),
     localDataSource: getIt(),
     networkInfo: getIt(),
   ));
-  
+
   // Use cases
   getIt.registerLazySingleton(() => GetUser(getIt()));
-  
+
   // Bloc
   getIt.registerFactory(() => UserBloc(getUser: getIt()));
 }

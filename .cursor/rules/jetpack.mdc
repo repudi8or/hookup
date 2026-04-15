@@ -47,7 +47,7 @@ You are a Kotlin and Android Jetpack component library expert, proficient in mod
 class SearchViewModel(private val repository: SearchRepository) : ViewModel() {
     private val _searchResults = MutableLiveData<List<SearchResult>>()
     val searchResults: LiveData<List<SearchResult>> = _searchResults
-    
+
     fun search(query: String) {
         viewModelScope.launch {
             val results = repository.search(query)
@@ -115,7 +115,7 @@ data class ArticleEntity(
 interface ArticleDao {
     @Query("SELECT * FROM articles")
     fun getAllArticles(): Flow<List<ArticleEntity>>
-    
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertArticle(article: ArticleEntity)
 }
@@ -133,7 +133,7 @@ class MyLifecycleObserver(private val lifecycleOwner: LifecycleOwner) : DefaultL
     override fun onResume(owner: LifecycleOwner) {
         // Execute logic in Resume state
     }
-    
+
     override fun onPause(owner: LifecycleOwner) {
         // Execute logic in Pause state
     }
@@ -157,7 +157,7 @@ lifecycle.addObserver(MyLifecycleObserver(this))
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/nav_graph"
     app:startDestination="@id/homeFragment">
-    
+
     <fragment
         android:id="@+id/homeFragment"
         android:name="com.example.app.HomeFragment"
@@ -166,7 +166,7 @@ lifecycle.addObserver(MyLifecycleObserver(this))
             android:id="@+id/action_home_to_detail"
             app:destination="@id/detailFragment" />
     </fragment>
-    
+
     <fragment
         android:id="@+id/detailFragment"
         android:name="com.example.app.DetailFragment"
@@ -191,7 +191,7 @@ lifecycle.addObserver(MyLifecycleObserver(this))
 fun ArticleList(viewModel: ArticleViewModel = viewModel()) {
     val articles by viewModel.articles.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    
+
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
@@ -224,7 +224,7 @@ class ArticleRepository(
     fun getArticles(): Flow<List<Article>> = flow {
         // First emit local data
         emit(localDataSource.getArticles())
-        
+
         // Then try to fetch remote data and update local
         try {
             val remoteArticles = remoteDataSource.getArticles()
@@ -284,7 +284,7 @@ sealed class Result<out T> {
 class ArticleViewModel(private val repository: ArticleRepository) : ViewModel() {
     private val _articlesState = MutableStateFlow<Result<List<Article>>>(Result.Loading)
     val articlesState: StateFlow<Result<List<Article>>> = _articlesState
-    
+
     fun loadArticles() {
         viewModelScope.launch {
             _articlesState.value = Result.Loading
@@ -343,12 +343,12 @@ class ArticleViewModel(private val repository: ArticleRepository) : ViewModel() 
 class ArticleFragment : Fragment() {
     private var _binding: FragmentArticleBinding? = null
     private val binding get() = _binding!!
-    
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentArticleBinding.inflate(inflater, container, false)
         return binding.root
     }
-    
+
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
@@ -362,13 +362,13 @@ class ArticleAdapter : ListAdapter<Article, ArticleViewHolder>(DIFF_CALLBACK) {
             override fun areItemsTheSame(oldItem: Article, newItem: Article): Boolean {
                 return oldItem.id == newItem.id
             }
-            
+
             override fun areContentsTheSame(oldItem: Article, newItem: Article): Boolean {
                 return oldItem == newItem
             }
         }
     }
-    
+
     // Implement other methods...
 }
 ```
@@ -421,10 +421,10 @@ fun `load articles returns success with data`() = runTest {
     // Arrange
     val fakeArticles = listOf(Article(1, "Title", "Content"))
     coEvery { repository.getArticles() } returns fakeArticles
-    
+
     // Act
     viewModel.loadArticles()
-    
+
     // Assert
     val state = viewModel.articlesState.value
     assertTrue(state is Result.Success)
