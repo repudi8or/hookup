@@ -15,7 +15,7 @@ DiscoveredPeer makePeer(String name, {String endpointId = 'ep1'}) =>
     DiscoveredPeer(
       endpointId: endpointId,
       bundle: ProfileBundle(
-        profile: ProfileModel(name: name, bio: 'Bio', photoUrl: null),
+        profile: ProfileModel(name: name, bio: 'Bio for $name', photoUrl: null),
         photoBytes: Uint8List(0),
       ),
       lastSeen: DateTime(2026, 1, 1),
@@ -36,9 +36,14 @@ void main() {
       await tester.pumpWidget(wrap(NearbyScreen(peers: const [])));
       expect(find.byType(PeerAvatar), findsNothing);
     });
+
+    testWidgets('view toggle button is hidden when no peers', (tester) async {
+      await tester.pumpWidget(wrap(NearbyScreen(peers: const [])));
+      expect(find.byKey(const Key('view-toggle')), findsNothing);
+    });
   });
 
-  group('NearbyScreen — populated state', () {
+  group('NearbyScreen — populated scatter state (default)', () {
     testWidgets('shows a PeerAvatar for each peer', (tester) async {
       final peers = [
         makePeer('Alice', endpointId: 'ep1'),
@@ -49,12 +54,13 @@ void main() {
       expect(find.byType(PeerAvatar), findsNWidgets(3));
     });
 
-    testWidgets('does not show RadarAnimation when peers are present', (
-      tester,
-    ) async {
-      await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
-      expect(find.byType(RadarAnimation), findsNothing);
-    });
+    testWidgets(
+      'still shows RadarAnimation as background when peers are present',
+      (tester) async {
+        await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
+        expect(find.byType(RadarAnimation), findsOneWidget);
+      },
+    );
 
     testWidgets('displays each peer name', (tester) async {
       final peers = [
@@ -64,6 +70,60 @@ void main() {
       await tester.pumpWidget(wrap(NearbyScreen(peers: peers)));
       expect(find.text('Alice'), findsOneWidget);
       expect(find.text('Bob'), findsOneWidget);
+    });
+
+    testWidgets('view toggle button is visible when peers are present', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
+      expect(find.byKey(const Key('view-toggle')), findsOneWidget);
+    });
+  });
+
+  group('NearbyScreen — list view', () {
+    testWidgets('tapping view toggle switches to list view', (tester) async {
+      await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
+      await tester.tap(find.byKey(const Key('view-toggle')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ListView), findsOneWidget);
+    });
+
+    testWidgets('list view shows a row for each peer name', (tester) async {
+      final peers = [
+        makePeer('Alice', endpointId: 'ep1'),
+        makePeer('Bob', endpointId: 'ep2'),
+      ];
+      await tester.pumpWidget(wrap(NearbyScreen(peers: peers)));
+      await tester.tap(find.byKey(const Key('view-toggle')));
+      await tester.pumpAndSettle();
+      expect(find.text('Alice'), findsOneWidget);
+      expect(find.text('Bob'), findsOneWidget);
+    });
+
+    testWidgets('list view shows peer bio', (tester) async {
+      await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
+      await tester.tap(find.byKey(const Key('view-toggle')));
+      await tester.pumpAndSettle();
+      expect(find.text('Bio for Alice'), findsOneWidget);
+    });
+
+    testWidgets('list view does not show RadarAnimation', (tester) async {
+      await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
+      await tester.tap(find.byKey(const Key('view-toggle')));
+      await tester.pumpAndSettle();
+      expect(find.byType(RadarAnimation), findsNothing);
+    });
+
+    testWidgets('tapping toggle again returns to scatter view', (tester) async {
+      await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
+      await tester.tap(find.byKey(const Key('view-toggle')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('view-toggle')));
+      // Use pump() not pumpAndSettle() — RadarAnimation loops forever and
+      // pumpAndSettle would time out waiting for it to finish.
+      await tester.pump();
+      expect(find.byType(RadarAnimation), findsOneWidget);
+      expect(find.byType(PeerAvatar), findsOneWidget);
     });
   });
 
