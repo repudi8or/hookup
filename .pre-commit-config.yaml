@@ -1,0 +1,41 @@
+repos:
+  # General file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-added-large-files
+        args: [--maxkb=500]
+
+  # Dart / Flutter
+  - repo: local
+    hooks:
+      - id: dart-format
+        name: dart format
+        description: Fails if any Dart file is not correctly formatted.
+        language: system
+        entry: dart format --set-exit-if-changed .
+        pass_filenames: false
+        types: [dart]
+
+      - id: flutter-analyze
+        name: flutter analyze
+        description: Runs Dart static analysis — fails on any warning or error.
+        language: system
+        entry: flutter analyze --no-pub
+        pass_filenames: false
+        types: [dart]
+
+      - id: flutter-test
+        name: flutter test
+        description: Runs the full unit + widget test suite. Runs on pre-push only.
+        language: system
+        entry: flutter test
+        pass_filenames: false
+        stages: [pre-push]

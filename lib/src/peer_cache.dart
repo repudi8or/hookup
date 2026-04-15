@@ -13,10 +13,10 @@ class DiscoveredPeer {
   final DateTime lastSeen;
 
   DiscoveredPeer copyWithSeen(DateTime lastSeen) => DiscoveredPeer(
-        endpointId: endpointId,
-        bundle: bundle,
-        lastSeen: lastSeen,
-      );
+    endpointId: endpointId,
+    bundle: bundle,
+    lastSeen: lastSeen,
+  );
 }
 
 /// Caches [DiscoveredPeer] entries by their Nearby Connections endpoint ID.
@@ -60,8 +60,6 @@ class PeerCache {
   /// Returns all peers whose [DiscoveredPeer.lastSeen] is within [staleAfter].
   List<DiscoveredPeer> get activePeers {
     final cutoff = _clock().subtract(staleAfter);
-    return _peers.values
-        .where((p) => !p.lastSeen.isBefore(cutoff))
-        .toList();
+    return _peers.values.where((p) => !p.lastSeen.isBefore(cutoff)).toList();
   }
 }

@@ -7,9 +7,9 @@ import 'package:hookup/src/profile_model.dart';
 
 void main() {
   ProfileBundle makeBundle(String name) => ProfileBundle(
-        profile: ProfileModel(name: name, bio: 'Bio', photoUrl: null),
-        photoBytes: Uint8List.fromList([1, 2, 3]),
-      );
+    profile: ProfileModel(name: name, bio: 'Bio', photoUrl: null),
+    photoBytes: Uint8List.fromList([1, 2, 3]),
+  );
 
   // Returns a PeerCache with a controllable clock.
   (PeerCache, void Function(Duration)) makeCache({
@@ -72,8 +72,10 @@ void main() {
       final (cache, _) = makeCache();
       cache.upsert('ep1', makeBundle('Alice'));
       cache.upsert('ep2', makeBundle('Bob'));
-      expect(cache.activePeers.map((p) => p.endpointId),
-          containsAll(['ep1', 'ep2']));
+      expect(
+        cache.activePeers.map((p) => p.endpointId),
+        containsAll(['ep1', 'ep2']),
+      );
     });
 
     test('excludes peers older than staleAfter', () {

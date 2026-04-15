@@ -46,8 +46,9 @@ void main() {
     when(() => service.startDiscovery()).thenAnswer((_) async {});
     when(() => service.stopAdvertising()).thenAnswer((_) async {});
     when(() => service.stopDiscovery()).thenAnswer((_) async {});
-    when(() => service.requestConnection(any(), any()))
-        .thenAnswer((_) async {});
+    when(
+      () => service.requestConnection(any(), any()),
+    ).thenAnswer((_) async {});
     when(() => service.acceptConnection(any())).thenAnswer((_) async {});
     when(() => service.sendBytes(any(), any())).thenAnswer((_) async {});
     when(() => service.disconnect(any())).thenAnswer((_) async {});
@@ -89,19 +90,25 @@ void main() {
       verify(() => service.sendBytes('ep1', any())).called(1);
     });
 
-    test('upserts peer into cache when valid profile data is received',
-        () async {
-      events.add(PeerDataReceived(endpointId: 'ep1', bytes: ownBundleBytes()));
-      await pump();
-      expect(cache.contains('ep1'), isTrue);
-      expect(cache.get('ep1')?.bundle.profile.name, equals('Me'));
-    });
+    test(
+      'upserts peer into cache when valid profile data is received',
+      () async {
+        events.add(
+          PeerDataReceived(endpointId: 'ep1', bytes: ownBundleBytes()),
+        );
+        await pump();
+        expect(cache.contains('ep1'), isTrue);
+        expect(cache.get('ep1')?.bundle.profile.name, equals('Me'));
+      },
+    );
 
     test('does not throw when received data is malformed', () async {
-      events.add(PeerDataReceived(
-        endpointId: 'ep1',
-        bytes: Uint8List.fromList([0, 1, 2]), // bad payload
-      ));
+      events.add(
+        PeerDataReceived(
+          endpointId: 'ep1',
+          bytes: Uint8List.fromList([0, 1, 2]), // bad payload
+        ),
+      );
       await pump();
       expect(cache.contains('ep1'), isFalse);
     });

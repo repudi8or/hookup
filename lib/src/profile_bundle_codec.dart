@@ -86,8 +86,9 @@ class ProfileBundleCodec {
 
     final Map<String, dynamic> json;
     try {
-      json = jsonDecode(utf8.decode(bytes.sublist(4, 4 + jsonLength)))
-          as Map<String, dynamic>;
+      json =
+          jsonDecode(utf8.decode(bytes.sublist(4, 4 + jsonLength)))
+              as Map<String, dynamic>;
     } catch (_) {
       throw const ProfileBundleMalformedException('invalid JSON in payload');
     }

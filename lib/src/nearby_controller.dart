@@ -16,9 +16,9 @@ class NearbyController {
     required NearbyServiceInterface service,
     required PeerCache cache,
     required ProfileBundle Function() ownBundle,
-  })  : _service = service,
-        _cache = cache,
-        _ownBundle = ownBundle;
+  }) : _service = service,
+       _cache = cache,
+       _ownBundle = ownBundle;
 
   final NearbyServiceInterface _service;
   final PeerCache _cache;
@@ -51,7 +51,10 @@ class NearbyController {
 
       case PeerConnected(:final endpointId):
         final bundle = _ownBundle();
-        final bytes = ProfileBundleCodec.encode(bundle.profile, bundle.photoBytes);
+        final bytes = ProfileBundleCodec.encode(
+          bundle.profile,
+          bundle.photoBytes,
+        );
         _service.sendBytes(endpointId, bytes);
 
       case PeerDataReceived(:final endpointId, :final bytes):

@@ -9,8 +9,7 @@ class ProfileModel {
   final String bio;
   final String? photoUrl;
 
-  bool get isComplete =>
-      name.isNotEmpty && bio.isNotEmpty && photoUrl != null;
+  bool get isComplete => name.isNotEmpty && bio.isNotEmpty && photoUrl != null;
 
   ProfileModel copyWith({
     String? name,
