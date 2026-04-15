@@ -76,7 +76,7 @@ final _allFakePeers = [
   _makeFakePeer('Bob', 'ep2'),
   _makeFakePeer('Carol', 'ep3'),
   _makeFakePeer('Dave', 'ep4'),
-  _makeFakePeer('Eve', 'ep5'),
+  _makeFakePeer('Kirsty', 'ep5'),
   _makeFakePeer('Frank', 'ep6'),
   _makeFakePeer('Grace', 'ep7'),
   _makeFakePeer('Henry', 'ep8'),
