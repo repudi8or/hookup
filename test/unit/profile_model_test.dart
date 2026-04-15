@@ -69,4 +69,49 @@ void main() {
       expect(cleared.isComplete, isFalse);
     });
   });
+
+  group('ProfileModel — optional context fields', () {
+    test('all optional fields default to null', () {
+      final profile = ProfileModel(name: 'Alice', bio: 'Hey', photoUrl: null);
+      expect(profile.gender, isNull);
+      expect(profile.age, isNull);
+      expect(profile.height, isNull);
+      expect(profile.bodyShape, isNull);
+      expect(profile.hairColour, isNull);
+    });
+
+    test('isComplete is unaffected by optional context fields', () {
+      final profile = ProfileModel(
+        name: 'Alice',
+        bio: 'Hey',
+        photoUrl: 'url',
+        gender: 'Woman',
+        age: 28,
+        height: 168,
+        bodyShape: 'Slim',
+        hairColour: 'Blonde',
+      );
+      expect(profile.isComplete, isTrue);
+    });
+
+    test('copyWith updates optional context fields independently', () {
+      final base = ProfileModel(
+        name: 'Alice',
+        bio: 'Hey',
+        photoUrl: null,
+        gender: 'Woman',
+        age: 28,
+        height: 168,
+        bodyShape: 'Slim',
+        hairColour: 'Blonde',
+      );
+      final updated = base.copyWith(age: 29, hairColour: 'Red');
+      expect(updated.age, equals(29));
+      expect(updated.hairColour, equals('Red'));
+      // Unchanged fields preserved.
+      expect(updated.gender, equals('Woman'));
+      expect(updated.height, equals(168));
+      expect(updated.bodyShape, equals('Slim'));
+    });
+  });
 }

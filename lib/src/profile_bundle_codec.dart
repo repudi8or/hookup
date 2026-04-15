@@ -49,7 +49,15 @@ class ProfileBundleCodec {
   /// [kMaxProfileBundleBytes].
   static Uint8List encode(ProfileModel profile, Uint8List photoBytes) {
     final jsonBytes = utf8.encode(
-      jsonEncode({'name': profile.name, 'bio': profile.bio}),
+      jsonEncode({
+        'name': profile.name,
+        'bio': profile.bio,
+        if (profile.gender != null) 'gender': profile.gender,
+        if (profile.age != null) 'age': profile.age,
+        if (profile.height != null) 'height': profile.height,
+        if (profile.bodyShape != null) 'bodyShape': profile.bodyShape,
+        if (profile.hairColour != null) 'hairColour': profile.hairColour,
+      }),
     );
 
     final totalLength = 4 + jsonBytes.length + photoBytes.length;
@@ -104,7 +112,16 @@ class ProfileBundleCodec {
     final photoBytes = bytes.sublist(4 + jsonLength);
 
     return ProfileBundle(
-      profile: ProfileModel(name: name, bio: bio, photoUrl: null),
+      profile: ProfileModel(
+        name: name,
+        bio: bio,
+        photoUrl: null,
+        gender: json['gender'] as String?,
+        age: json['age'] as int?,
+        height: json['height'] as int?,
+        bodyShape: json['bodyShape'] as String?,
+        hairColour: json['hairColour'] as String?,
+      ),
       photoBytes: photoBytes,
     );
   }

@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
+import 'dart:math';
 import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
 
 import 'src/widgets/broadcast_toggle.dart';
 import 'src/widgets/nearby_screen.dart';
@@ -38,19 +40,54 @@ class HookupHome extends StatefulWidget {
   State<HookupHome> createState() => _HookupHomeState();
 }
 
-class _HookupHomeState extends State<HookupHome> {
-  bool _profileComplete = false;
-  bool _broadcasting = false;
-  List<DiscoveredPeer> _fakePeers = [];
+// ---------------------------------------------------------------------------
+// Dev-only fake peer data
+// ---------------------------------------------------------------------------
 
-  DiscoveredPeer _fakePeer(String name, String id) => DiscoveredPeer(
+const _genders = ['Man', 'Woman', 'Non-binary'];
+const _bodyShapes = ['Slim', 'Athletic', 'Average', 'Curvy', 'Stocky'];
+const _hairColours = ['Blonde', 'Brunette', 'Black', 'Red', 'Grey', 'Bald'];
+
+final _devRandom = Random(42); // seeded so layout is stable across hot-reloads
+
+DiscoveredPeer _makeFakePeer(String name, String id) {
+  T pick<T>(List<T> list) => list[_devRandom.nextInt(list.length)];
+  return DiscoveredPeer(
     endpointId: id,
     bundle: ProfileBundle(
-      profile: ProfileModel(name: name, bio: 'Bio', photoUrl: null),
+      profile: ProfileModel(
+        name: name,
+        bio: 'Hey, I\'m $name 👋',
+        photoUrl: null,
+        gender: pick(_genders),
+        age: 18 + _devRandom.nextInt(35),
+        height: 155 + _devRandom.nextInt(46),
+        bodyShape: pick(_bodyShapes),
+        hairColour: pick(_hairColours),
+      ),
       photoBytes: Uint8List(0),
     ),
     lastSeen: DateTime.now(),
   );
+}
+
+final _allFakePeers = [
+  _makeFakePeer('Alice', 'ep1'),
+  _makeFakePeer('Bob', 'ep2'),
+  _makeFakePeer('Carol', 'ep3'),
+  _makeFakePeer('Dave', 'ep4'),
+  _makeFakePeer('Eve', 'ep5'),
+  _makeFakePeer('Frank', 'ep6'),
+  _makeFakePeer('Grace', 'ep7'),
+  _makeFakePeer('Henry', 'ep8'),
+];
+
+// ---------------------------------------------------------------------------
+
+class _HookupHomeState extends State<HookupHome> {
+  bool _profileComplete = false;
+  bool _broadcasting = false;
+  List<DiscoveredPeer> _fakePeers = [];
 
   @override
   Widget build(BuildContext context) {
@@ -120,15 +157,7 @@ class _HookupHomeState extends State<HookupHome> {
                   ),
                   OutlinedButton.icon(
                     onPressed: () => setState(() {
-                      if (_fakePeers.isEmpty) {
-                        _fakePeers = [
-                          _fakePeer('Alice', 'ep1'),
-                          _fakePeer('Bob', 'ep2'),
-                          _fakePeer('Carol', 'ep3'),
-                        ];
-                      } else {
-                        _fakePeers = [];
-                      }
+                      _fakePeers = _fakePeers.isEmpty ? _allFakePeers : [];
                     }),
                     icon: Icon(
                       _fakePeers.isEmpty ? Icons.group_add : Icons.group_off,

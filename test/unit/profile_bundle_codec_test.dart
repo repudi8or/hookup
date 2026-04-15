@@ -47,6 +47,41 @@ void main() {
     });
   });
 
+  group('ProfileBundleCodec — optional context fields', () {
+    test('round-trip preserves all optional fields when set', () {
+      final profile = ProfileModel(
+        name: 'Alice',
+        bio: 'Hey',
+        photoUrl: null,
+        gender: 'Woman',
+        age: 28,
+        height: 168,
+        bodyShape: 'Slim',
+        hairColour: 'Blonde',
+      );
+      final bundle = ProfileBundleCodec.decode(
+        ProfileBundleCodec.encode(profile, fakePhoto),
+      );
+      expect(bundle.profile.gender, equals('Woman'));
+      expect(bundle.profile.age, equals(28));
+      expect(bundle.profile.height, equals(168));
+      expect(bundle.profile.bodyShape, equals('Slim'));
+      expect(bundle.profile.hairColour, equals('Blonde'));
+    });
+
+    test('optional fields are null when absent from encoded JSON', () {
+      // completeProfile has no optional fields set.
+      final bundle = ProfileBundleCodec.decode(
+        ProfileBundleCodec.encode(completeProfile, fakePhoto),
+      );
+      expect(bundle.profile.gender, isNull);
+      expect(bundle.profile.age, isNull);
+      expect(bundle.profile.height, isNull);
+      expect(bundle.profile.bodyShape, isNull);
+      expect(bundle.profile.hairColour, isNull);
+    });
+  });
+
   group('ProfileBundleCodec.decode', () {
     test('throws on an empty byte array', () {
       expect(
