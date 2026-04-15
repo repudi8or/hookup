@@ -127,6 +127,27 @@ Map<String, DiscoveredPeer> _peerCache = {};
 
 Google Nearby Connections was chosen because it abstracts Wi-Fi Aware (Android) and Multipeer Connectivity (iOS) behind a single cross-platform API.
 
+## Git Workflow
+
+This project uses **GitHub Flow** — the simplest and most streamlined branching model. `main` is always deployable.
+
+### The cycle
+
+1. **Branch** — create a short-lived feature branch from `main`:
+   ```bash
+   git checkout -b feature/my-feature
+   ```
+2. **Commit** — make changes and commit locally (pre-commit hooks run automatically)
+3. **Push** — push the branch and open a Pull Request for review (pre-push hooks run tests)
+4. **Review** — discuss and get approval via PR
+5. **Merge** — merge into `main` and deploy immediately
+
+### Rules
+- `main` is always in a deployable state — never commit broken code directly to it
+- Branch names should be short and descriptive: `feature/broadcast-toggle`, `fix/peer-cache-eviction`
+- PRs should be small and focused — one concern per PR
+- Delete feature branches after merging
+
 ## Development Environment
 
 **Write the tests first. Always.**
