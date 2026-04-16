@@ -105,6 +105,8 @@ class _HookupHomeState extends State<HookupHome> {
               // Header
               Row(
                 children: [
+                  Image.asset('assets/icon/icon.jpeg', width: 80, height: 80),
+                  const SizedBox(width: 12),
                   CircleAvatar(
                     radius: 28,
                     backgroundColor: Theme.of(
