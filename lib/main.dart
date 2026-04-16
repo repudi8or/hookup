@@ -4,8 +4,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import 'src/widgets/broadcast_toggle.dart';
+import 'src/widgets/filter_panel.dart';
 import 'src/widgets/nearby_screen.dart';
 import 'src/peer_cache.dart';
+import 'src/peer_filter.dart';
 import 'src/profile_bundle_codec.dart';
 import 'src/profile_model.dart';
 
@@ -44,13 +46,12 @@ class HookupHome extends StatefulWidget {
 // Dev-only fake peer data
 // ---------------------------------------------------------------------------
 
-const _genders = ['Man', 'Woman', 'Non-binary'];
 const _bodyShapes = ['Slim', 'Athletic', 'Average', 'Curvy', 'Stocky'];
 const _hairColours = ['Blonde', 'Brunette', 'Black', 'Red', 'Grey', 'Bald'];
 
 final _devRandom = Random(42); // seeded so layout is stable across hot-reloads
 
-DiscoveredPeer _makeFakePeer(String name, String id) {
+DiscoveredPeer _makeFakePeer(String name, String id, {required String gender}) {
   T pick<T>(List<T> list) => list[_devRandom.nextInt(list.length)];
   return DiscoveredPeer(
     endpointId: id,
@@ -59,7 +60,7 @@ DiscoveredPeer _makeFakePeer(String name, String id) {
         name: name,
         bio: 'Hey, I\'m $name 👋',
         photoUrl: null,
-        gender: pick(_genders),
+        gender: gender,
         age: 18 + _devRandom.nextInt(35),
         height: 155 + _devRandom.nextInt(46),
         bodyShape: pick(_bodyShapes),
@@ -72,14 +73,14 @@ DiscoveredPeer _makeFakePeer(String name, String id) {
 }
 
 final _allFakePeers = [
-  _makeFakePeer('Alice', 'ep1'),
-  _makeFakePeer('Bob', 'ep2'),
-  _makeFakePeer('Carol', 'ep3'),
-  _makeFakePeer('Dave', 'ep4'),
-  _makeFakePeer('Kirsty', 'ep5'),
-  _makeFakePeer('Frank', 'ep6'),
-  _makeFakePeer('Grace', 'ep7'),
-  _makeFakePeer('Henry', 'ep8'),
+  _makeFakePeer('Alice', 'ep1', gender: 'Woman'),
+  _makeFakePeer('Bob', 'ep2', gender: 'Man'),
+  _makeFakePeer('Carol', 'ep3', gender: 'Woman'),
+  _makeFakePeer('Dave', 'ep4', gender: 'Man'),
+  _makeFakePeer('Kirsty', 'ep5', gender: 'Woman'),
+  _makeFakePeer('Frank', 'ep6', gender: 'Man'),
+  _makeFakePeer('Grace', 'ep7', gender: 'Non-binary'),
+  _makeFakePeer('Henry', 'ep8', gender: 'Man'),
 ];
 
 // ---------------------------------------------------------------------------
@@ -88,6 +89,8 @@ class _HookupHomeState extends State<HookupHome> {
   bool _profileComplete = false;
   bool _broadcasting = false;
   List<DiscoveredPeer> _fakePeers = [];
+  PeerFilter _filter = const PeerFilter();
+  bool _filterExpanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -169,10 +172,28 @@ class _HookupHomeState extends State<HookupHome> {
                 ],
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+
+              // Filter panel — only visible when there are peers to filter.
+              if (_fakePeers.isNotEmpty)
+                FilterPanel(
+                  filter: _filter,
+                  expanded: _filterExpanded,
+                  onExpandedChanged: (v) => setState(() => _filterExpanded = v),
+                  onChanged: (f) => setState(() => _filter = f),
+                ),
+
+              const SizedBox(height: 8),
 
               // Nearby area
-              Expanded(child: NearbyScreen(peers: _fakePeers)),
+              Expanded(
+                child: NearbyScreen(
+                  peers: _fakePeers
+                      .where(_filter.matches)
+                      .toList(growable: false),
+                  broadcasting: _broadcasting,
+                ),
+              ),
             ],
           ),
         ),

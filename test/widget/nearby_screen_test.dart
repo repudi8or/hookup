@@ -26,19 +26,25 @@ void main() {
     testWidgets('shows RadarAnimation when no peers are nearby', (
       tester,
     ) async {
-      await tester.pumpWidget(wrap(NearbyScreen(peers: const [])));
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: const [], broadcasting: false)),
+      );
       expect(find.byType(RadarAnimation), findsOneWidget);
     });
 
     testWidgets('does not show any PeerAvatar when peers list is empty', (
       tester,
     ) async {
-      await tester.pumpWidget(wrap(NearbyScreen(peers: const [])));
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: const [], broadcasting: false)),
+      );
       expect(find.byType(PeerAvatar), findsNothing);
     });
 
     testWidgets('view toggle button is hidden when no peers', (tester) async {
-      await tester.pumpWidget(wrap(NearbyScreen(peers: const [])));
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: const [], broadcasting: false)),
+      );
       expect(find.byKey(const Key('view-toggle')), findsNothing);
     });
   });
@@ -50,14 +56,18 @@ void main() {
         makePeer('Bob', endpointId: 'ep2'),
         makePeer('Carol', endpointId: 'ep3'),
       ];
-      await tester.pumpWidget(wrap(NearbyScreen(peers: peers)));
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: peers, broadcasting: false)),
+      );
       expect(find.byType(PeerAvatar), findsNWidgets(3));
     });
 
     testWidgets(
       'still shows RadarAnimation as background when peers are present',
       (tester) async {
-        await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
+        await tester.pumpWidget(
+          wrap(NearbyScreen(peers: [makePeer('Alice')], broadcasting: false)),
+        );
         expect(find.byType(RadarAnimation), findsOneWidget);
       },
     );
@@ -67,7 +77,9 @@ void main() {
         makePeer('Alice', endpointId: 'ep1'),
         makePeer('Bob', endpointId: 'ep2'),
       ];
-      await tester.pumpWidget(wrap(NearbyScreen(peers: peers)));
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: peers, broadcasting: false)),
+      );
       expect(find.text('Alice'), findsOneWidget);
       expect(find.text('Bob'), findsOneWidget);
     });
@@ -75,14 +87,18 @@ void main() {
     testWidgets('view toggle button is visible when peers are present', (
       tester,
     ) async {
-      await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: [makePeer('Alice')], broadcasting: false)),
+      );
       expect(find.byKey(const Key('view-toggle')), findsOneWidget);
     });
   });
 
   group('NearbyScreen — list view', () {
     testWidgets('tapping view toggle switches to list view', (tester) async {
-      await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: [makePeer('Alice')], broadcasting: false)),
+      );
       await tester.tap(find.byKey(const Key('view-toggle')));
       await tester.pumpAndSettle();
       expect(find.byType(ListView), findsOneWidget);
@@ -93,7 +109,9 @@ void main() {
         makePeer('Alice', endpointId: 'ep1'),
         makePeer('Bob', endpointId: 'ep2'),
       ];
-      await tester.pumpWidget(wrap(NearbyScreen(peers: peers)));
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: peers, broadcasting: false)),
+      );
       await tester.tap(find.byKey(const Key('view-toggle')));
       await tester.pumpAndSettle();
       expect(find.text('Alice'), findsOneWidget);
@@ -101,21 +119,27 @@ void main() {
     });
 
     testWidgets('list view shows peer bio', (tester) async {
-      await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: [makePeer('Alice')], broadcasting: false)),
+      );
       await tester.tap(find.byKey(const Key('view-toggle')));
       await tester.pumpAndSettle();
       expect(find.text('Bio for Alice'), findsOneWidget);
     });
 
     testWidgets('list view does not show RadarAnimation', (tester) async {
-      await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: [makePeer('Alice')], broadcasting: false)),
+      );
       await tester.tap(find.byKey(const Key('view-toggle')));
       await tester.pumpAndSettle();
       expect(find.byType(RadarAnimation), findsNothing);
     });
 
     testWidgets('tapping toggle again returns to scatter view', (tester) async {
-      await tester.pumpWidget(wrap(NearbyScreen(peers: [makePeer('Alice')])));
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: [makePeer('Alice')], broadcasting: false)),
+      );
       await tester.tap(find.byKey(const Key('view-toggle')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('view-toggle')));
@@ -124,6 +148,40 @@ void main() {
       await tester.pump();
       expect(find.byType(RadarAnimation), findsOneWidget);
       expect(find.byType(PeerAvatar), findsOneWidget);
+    });
+  });
+
+  group('NearbyScreen — broadcast halo', () {
+    testWidgets('halo is shown when broadcasting with no peers', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: const [], broadcasting: true)),
+      );
+      expect(find.byType(BroadcastHalo), findsOneWidget);
+    });
+
+    testWidgets('halo is shown when broadcasting with peers', (tester) async {
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: [makePeer('Alice')], broadcasting: true)),
+      );
+      expect(find.byType(BroadcastHalo), findsOneWidget);
+    });
+
+    testWidgets('halo is not shown when not broadcasting', (tester) async {
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: const [], broadcasting: false)),
+      );
+      expect(find.byType(BroadcastHalo), findsNothing);
+    });
+
+    testWidgets('halo is not shown in list view', (tester) async {
+      await tester.pumpWidget(
+        wrap(NearbyScreen(peers: [makePeer('Alice')], broadcasting: true)),
+      );
+      await tester.tap(find.byKey(const Key('view-toggle')));
+      await tester.pumpAndSettle();
+      expect(find.byType(BroadcastHalo), findsNothing);
     });
   });
 

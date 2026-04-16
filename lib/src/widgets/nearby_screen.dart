@@ -8,14 +8,20 @@ enum _ViewMode { scatter, list }
 
 /// Main proximity content area.
 ///
-/// In scatter mode (default): [RadarAnimation] fills the background and each
-/// [PeerAvatar] floats at a polar-scattered position on top of it.
+/// In scatter mode (default): [RadarAnimation] fills the background, a
+/// [BroadcastHalo] ring glows when [broadcasting] is true, and each
+/// [PeerAvatar] floats at a polar-scattered position on top.
 /// In list mode: a scrollable [ListView] of peer rows replaces the scatter.
 /// A view-toggle button (only visible when peers are present) switches modes.
 class NearbyScreen extends StatefulWidget {
-  const NearbyScreen({super.key, required this.peers});
+  const NearbyScreen({
+    super.key,
+    required this.peers,
+    required this.broadcasting,
+  });
 
   final List<DiscoveredPeer> peers;
+  final bool broadcasting;
 
   @override
   State<NearbyScreen> createState() => _NearbyScreenState();
@@ -32,7 +38,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
         if (_viewMode == _ViewMode.list && widget.peers.isNotEmpty)
           _PeerListView(peers: widget.peers)
         else
-          _ScatterView(peers: widget.peers),
+          _ScatterView(peers: widget.peers, broadcasting: widget.broadcasting),
 
         // View-toggle button — only shown when there are peers to toggle over.
         if (widget.peers.isNotEmpty)
@@ -62,13 +68,14 @@ class _NearbyScreenState extends State<NearbyScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// Scatter view — radar background + floating avatars
+// Scatter view — radar background + optional broadcast halo + floating avatars
 // ---------------------------------------------------------------------------
 
 class _ScatterView extends StatelessWidget {
-  const _ScatterView({required this.peers});
+  const _ScatterView({required this.peers, required this.broadcasting});
 
   final List<DiscoveredPeer> peers;
+  final bool broadcasting;
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +92,8 @@ class _ScatterView extends StatelessWidget {
           children: [
             // Radar always fills the background.
             const Positioned.fill(child: RadarAnimation()),
+            // Green halo ring when broadcast is active.
+            if (broadcasting) const Positioned.fill(child: BroadcastHalo()),
             // Peers floated at polar-scattered positions.
             for (var i = 0; i < n; i++)
               _positionedAvatar(peers[i], i, n, center, baseRadius),
@@ -234,6 +243,89 @@ class PeerAvatar extends StatelessWidget {
       ],
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Broadcast halo
+// ---------------------------------------------------------------------------
+
+/// Softly pulsing green ring drawn around the edge of the scatter view.
+/// Visible only when the user has broadcast enabled.
+class BroadcastHalo extends StatefulWidget {
+  const BroadcastHalo({super.key});
+
+  @override
+  State<BroadcastHalo> createState() => _BroadcastHaloState();
+}
+
+class _BroadcastHaloState extends State<BroadcastHalo>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+    _opacity = Tween<double>(
+      begin: 0.60,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Ring sits just inside the view boundary with a small inset.
+        final radius =
+            math.min(constraints.maxWidth, constraints.maxHeight) / 2 - 10;
+        return AnimatedBuilder(
+          animation: _opacity,
+          builder: (context, _) => CustomPaint(
+            size: Size(constraints.maxWidth, constraints.maxHeight),
+            painter: _HaloPainter(radius: radius, opacity: _opacity.value),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HaloPainter extends CustomPainter {
+  const _HaloPainter({required this.radius, required this.opacity});
+
+  final double radius;
+  final double opacity;
+
+  // Light green — stands out clearly on the dark theme without being harsh.
+  static const _green = Color(0xFF00E676); // Material Green A400 — vivid
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+
+    final paint = Paint()
+      ..color = _green.withValues(alpha: opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.0
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+
+    canvas.drawCircle(center, radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(_HaloPainter old) =>
+      old.opacity != opacity || old.radius != radius;
 }
 
 // ---------------------------------------------------------------------------
