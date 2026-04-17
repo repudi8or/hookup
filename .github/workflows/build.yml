@@ -64,6 +64,15 @@ jobs:
           path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 14
 
+      - name: Distribute to Firebase App Distribution
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          groups: internal
+          file: build/app/outputs/flutter-apk/app-debug.apk
+          releaseNotes: "Branch: ${{ github.ref_name }} — ${{ github.sha }}"
+
   # iOS build — unsigned, proves the app compiles cleanly for iOS.
   # For a signed IPA deployable via TestFlight, Apple signing certificates
   # must be added to GitHub secrets (see CLAUDE.md).
