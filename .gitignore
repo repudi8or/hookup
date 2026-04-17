@@ -1,3 +1,11 @@
+# Loose design assets (source images, not committed to the repo)
+*.jpeg
+*.jpg
+*.png
+!assets/**
+!ios/**
+!android/**
+
 # Miscellaneous
 *.class
 *.log
