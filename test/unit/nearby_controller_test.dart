@@ -125,4 +125,56 @@ void main() {
       expect(cache.contains('ep1'), isFalse);
     });
   });
+
+  group('NearbyController — broadcasting control', () {
+    test('start does not begin advertising', () {
+      verifyNever(() => service.startAdvertising(any()));
+    });
+
+    test('setBroadcasting(true) starts advertising', () async {
+      controller.setBroadcasting(true);
+      await pump();
+      verify(() => service.startAdvertising(any())).called(1);
+    });
+
+    test('setBroadcasting(false) stops advertising', () async {
+      controller.setBroadcasting(true);
+      controller.setBroadcasting(false);
+      await pump();
+      verify(() => service.stopAdvertising()).called(1);
+    });
+
+    test('setBroadcasting(true) twice only starts advertising once', () async {
+      controller.setBroadcasting(true);
+      controller.setBroadcasting(true);
+      await pump();
+      verify(() => service.startAdvertising(any())).called(1);
+    });
+  });
+
+  group('NearbyController — peerUpdates stream', () {
+    test('emits peer list when profile data received', () async {
+      final emitted = <List<DiscoveredPeer>>[];
+      controller.peerUpdates.listen(emitted.add);
+
+      events.add(PeerDataReceived(endpointId: 'ep1', bytes: ownBundleBytes()));
+      await pump();
+
+      expect(emitted, hasLength(1));
+      expect(emitted.first.single.endpointId, equals('ep1'));
+    });
+
+    test('emits empty list when last peer disconnects', () async {
+      events.add(PeerDataReceived(endpointId: 'ep1', bytes: ownBundleBytes()));
+      await pump();
+
+      final emitted = <List<DiscoveredPeer>>[];
+      controller.peerUpdates.listen(emitted.add);
+
+      events.add(const PeerDisconnected(endpointId: 'ep1'));
+      await pump();
+
+      expect(emitted.last, isEmpty);
+    });
+  });
 }

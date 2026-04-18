@@ -2,15 +2,18 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
-import 'src/widgets/broadcast_toggle.dart';
-import 'src/widgets/filter_panel.dart';
-import 'src/widgets/nearby_screen.dart';
-import 'src/widgets/profile_setup_screen.dart';
+import 'src/nearby_controller.dart';
+import 'src/nearby_service_impl.dart';
 import 'src/peer_cache.dart';
 import 'src/peer_filter.dart';
 import 'src/profile_bundle_codec.dart';
 import 'src/profile_model.dart';
+import 'src/widgets/broadcast_toggle.dart';
+import 'src/widgets/filter_panel.dart';
+import 'src/widgets/nearby_screen.dart';
+import 'src/widgets/profile_setup_screen.dart';
 
 void main() {
   runApp(const HookupApp());
@@ -50,7 +53,7 @@ class HookupHome extends StatefulWidget {
 const _bodyShapes = ['Slim', 'Athletic', 'Average', 'Curvy', 'Stocky'];
 const _hairColours = ['Blonde', 'Brunette', 'Black', 'Red', 'Grey', 'Bald'];
 
-final _devRandom = Random(42); // seeded so layout is stable across hot-reloads
+final _devRandom = Random(42);
 
 DiscoveredPeer _makeFakePeer(String name, String id, {required String gender}) {
   T pick<T>(List<T> list) => list[_devRandom.nextInt(list.length)];
@@ -89,11 +92,73 @@ final _allFakePeers = [
 class _HookupHomeState extends State<HookupHome> {
   ProfileBundle? _myProfile;
   bool _broadcasting = false;
+
+  // Real discovered peers from Nearby Connections.
+  List<DiscoveredPeer> _realPeers = [];
+
+  // Dev-only fake peers (toggled by button).
   List<DiscoveredPeer> _fakePeers = [];
+
   PeerFilter _filter = const PeerFilter();
   bool _filterExpanded = false;
 
+  late final FlutterNearbyConnectionsService _nearbyService;
+  late final NearbyController _controller;
+
   bool get _profileComplete => _myProfile?.profile.isComplete ?? false;
+
+  List<DiscoveredPeer> get _allPeers => [..._realPeers, ..._fakePeers];
+
+  @override
+  void initState() {
+    super.initState();
+    _nearbyService = FlutterNearbyConnectionsService();
+    _controller = NearbyController(
+      service: _nearbyService,
+      cache: PeerCache(),
+      ownBundle: () =>
+          _myProfile ??
+          ProfileBundle(
+            profile: const ProfileModel(name: '', bio: '', photoUrl: null),
+            photoBytes: Uint8List(0),
+          ),
+    );
+    _initNearby();
+  }
+
+  Future<void> _initNearby() async {
+    await _requestPermissions();
+    await _nearbyService.initialize();
+    _controller.start();
+    _controller.peerUpdates.listen((peers) {
+      if (mounted) setState(() => _realPeers = peers);
+    });
+  }
+
+  Future<void> _requestPermissions() async {
+    // Request all permissions needed for Nearby Connections.
+    // On iOS only NSLocalNetworkUsageDescription is needed (granted via dialog).
+    await [
+      Permission.bluetooth,
+      Permission.bluetoothScan,
+      Permission.bluetoothAdvertise,
+      Permission.bluetoothConnect,
+      Permission.locationWhenInUse,
+      Permission.nearbyWifiDevices,
+    ].request();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _nearbyService.dispose();
+    super.dispose();
+  }
+
+  void _onBroadcastChanged(bool value) {
+    setState(() => _broadcasting = value);
+    _controller.setBroadcasting(value);
+  }
 
   Future<void> _openProfileSetup() async {
     await Navigator.push<void>(
@@ -112,6 +177,10 @@ class _HookupHomeState extends State<HookupHome> {
 
   @override
   Widget build(BuildContext context) {
+    final visiblePeers = _allPeers
+        .where(_filter.matches)
+        .toList(growable: false);
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
@@ -167,7 +236,7 @@ class _HookupHomeState extends State<HookupHome> {
                         BroadcastToggle(
                           profileComplete: _profileComplete,
                           isActive: _broadcasting,
-                          onChanged: (v) => setState(() => _broadcasting = v),
+                          onChanged: _onBroadcastChanged,
                         ),
                       ],
                     ),
@@ -199,7 +268,7 @@ class _HookupHomeState extends State<HookupHome> {
               const SizedBox(height: 16),
 
               // Filter panel — only visible when there are peers to filter.
-              if (_fakePeers.isNotEmpty)
+              if (_allPeers.isNotEmpty)
                 FilterPanel(
                   filter: _filter,
                   expanded: _filterExpanded,
@@ -212,9 +281,7 @@ class _HookupHomeState extends State<HookupHome> {
               // Nearby area
               Expanded(
                 child: NearbyScreen(
-                  peers: _fakePeers
-                      .where(_filter.matches)
-                      .toList(growable: false),
+                  peers: visiblePeers,
                   broadcasting: _broadcasting,
                 ),
               ),

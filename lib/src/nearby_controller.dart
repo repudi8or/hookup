@@ -25,13 +25,33 @@ class NearbyController {
   final ProfileBundle Function() _ownBundle;
   StreamSubscription<NearbyEvent>? _subscription;
 
+  final _peersCtrl = StreamController<List<DiscoveredPeer>>.broadcast(
+    sync: true,
+  );
+
+  /// Emits the current active peer list after every cache mutation.
+  Stream<List<DiscoveredPeer>> get peerUpdates => _peersCtrl.stream;
+
   static const _displayName = 'hookup';
 
-  /// Begin advertising, discovery, and event handling.
+  bool _broadcasting = false;
+
+  /// Begin passive discovery and event handling.
+  /// Advertising is off until [setBroadcasting] is called with `true`.
   void start() {
-    _service.startAdvertising(_displayName);
     _service.startDiscovery();
     _subscription = _service.events.listen(_onEvent);
+  }
+
+  /// Enable or disable advertising (broadcast mode).
+  void setBroadcasting(bool broadcasting) {
+    if (_broadcasting == broadcasting) return;
+    _broadcasting = broadcasting;
+    if (broadcasting) {
+      _service.startAdvertising(_displayName);
+    } else {
+      _service.stopAdvertising();
+    }
   }
 
   /// Stop all activity and release resources.
@@ -39,6 +59,7 @@ class NearbyController {
     _subscription?.cancel();
     _service.stopAdvertising();
     _service.stopDiscovery();
+    _peersCtrl.close();
   }
 
   void _onEvent(NearbyEvent event) {
@@ -61,12 +82,14 @@ class NearbyController {
         try {
           final bundle = ProfileBundleCodec.decode(bytes);
           _cache.upsert(endpointId, bundle);
+          _peersCtrl.add(_cache.activePeers);
         } on ProfileBundleMalformedException {
           // Malformed data from a peer is silently ignored.
         }
 
       case PeerDisconnected(:final endpointId):
         _cache.remove(endpointId);
+        _peersCtrl.add(_cache.activePeers);
     }
   }
 }
