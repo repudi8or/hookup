@@ -241,6 +241,7 @@ void main() {
       await tester.enterText(find.byKey(const Key('bio-field')), 'Hey there');
       await tester.pump();
 
+      await tester.ensureVisible(find.byKey(const Key('save-button')));
       await tester.tap(find.byKey(const Key('save-button')));
       await tester.pump();
 
@@ -248,6 +249,30 @@ void main() {
       expect(saved!.profile.name, equals('Alice'));
       expect(saved!.profile.bio, equals('Hey there'));
       expect(saved!.photoBytes, equals(Uint8List.fromList([1, 2, 3])));
+    });
+
+    testWidgets('saved profile has isComplete = true', (tester) async {
+      ProfileBundle? saved;
+
+      await tester.pumpWidget(
+        _wrap(
+          ProfileSetupScreen(
+            onSaved: (b) => saved = b,
+            photoPicker: _fakePicker,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('photo-tap-target')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('name-field')), 'Alice');
+      await tester.enterText(find.byKey(const Key('bio-field')), 'Hey');
+      await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('save-button')));
+      await tester.tap(find.byKey(const Key('save-button')));
+      await tester.pump();
+
+      expect(saved!.profile.isComplete, isTrue);
     });
 
     testWidgets('onSaved carries photo bytes from initial when not repicked', (
@@ -258,7 +283,7 @@ void main() {
         profile: const ProfileModel(
           name: 'Bob',
           bio: 'Howdy',
-          photoUrl: 'assets/icon/icon.jpeg',
+          photoUrl: 'local',
         ),
         photoBytes: originalBytes,
       );
@@ -270,18 +295,95 @@ void main() {
           ProfileSetupScreen(
             initial: initial,
             onSaved: (b) => saved = b,
-            photoPicker: _cancelPicker, // user doesn't pick a new photo
+            photoPicker: _cancelPicker,
           ),
         ),
       );
 
-      // Name and bio are pre-filled; just tap save
+      await tester.ensureVisible(find.byKey(const Key('save-button')));
       await tester.tap(find.byKey(const Key('save-button')));
       await tester.pump();
 
       expect(saved, isNotNull);
       expect(saved!.profile.name, equals('Bob'));
       expect(saved!.photoBytes, equals(originalBytes));
+    });
+  });
+
+  group('ProfileSetupScreen — optional fields', () {
+    testWidgets(
+      'gender, age, height, body shape, hair colour fields are present',
+      (tester) async {
+        await tester.pumpWidget(
+          _wrap(
+            ProfileSetupScreen(onSaved: (_) {}, photoPicker: _cancelPicker),
+          ),
+        );
+
+        expect(find.byKey(const Key('gender-field')), findsOneWidget);
+        expect(find.byKey(const Key('age-field')), findsOneWidget);
+        expect(find.byKey(const Key('height-field')), findsOneWidget);
+        expect(find.byKey(const Key('body-shape-field')), findsOneWidget);
+        expect(find.byKey(const Key('hair-colour-field')), findsOneWidget);
+      },
+    );
+
+    testWidgets('optional fields are pre-populated from initial bundle', (
+      tester,
+    ) async {
+      final initial = ProfileBundle(
+        profile: const ProfileModel(
+          name: 'Alice',
+          bio: 'Hey',
+          photoUrl: 'local',
+          gender: 'Woman',
+          age: 28,
+          height: 168,
+          bodyShape: 'Athletic',
+          hairColour: 'Brunette',
+        ),
+        photoBytes: Uint8List.fromList([1, 2, 3]),
+      );
+
+      await tester.pumpWidget(
+        _wrap(
+          ProfileSetupScreen(
+            initial: initial,
+            onSaved: (_) {},
+            photoPicker: _cancelPicker,
+          ),
+        ),
+      );
+
+      expect(find.widgetWithText(TextFormField, '28'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, '168'), findsOneWidget);
+    });
+
+    testWidgets('optional fields are included in saved bundle', (tester) async {
+      ProfileBundle? saved;
+
+      await tester.pumpWidget(
+        _wrap(
+          ProfileSetupScreen(
+            onSaved: (b) => saved = b,
+            photoPicker: _fakePicker,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('photo-tap-target')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('name-field')), 'Alice');
+      await tester.enterText(find.byKey(const Key('bio-field')), 'Hey');
+      await tester.enterText(find.byKey(const Key('age-field')), '28');
+      await tester.enterText(find.byKey(const Key('height-field')), '168');
+      await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('save-button')));
+      await tester.tap(find.byKey(const Key('save-button')));
+      await tester.pump();
+
+      expect(saved!.profile.age, equals(28));
+      expect(saved!.profile.height, equals(168));
     });
   });
 }

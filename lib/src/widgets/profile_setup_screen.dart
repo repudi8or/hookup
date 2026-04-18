@@ -1,8 +1,8 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../peer_filter.dart';
 import '../profile_bundle_codec.dart';
 import '../profile_model.dart';
 
@@ -30,14 +30,10 @@ class ProfileSetupScreen extends StatefulWidget {
     this.photoPicker,
   });
 
-  /// Pre-populate fields from an existing bundle (editing flow).
   final ProfileBundle? initial;
-
-  /// Called when the user taps Save with a complete, valid bundle.
   final ValueChanged<ProfileBundle> onSaved;
 
-  /// Overrideable photo picker — defaults to [defaultPhotoPicker].
-  /// Inject a fake in tests.
+  /// Overrideable photo picker — inject a fake in tests.
   final PhotoPicker? photoPicker;
 
   @override
@@ -47,17 +43,27 @@ class ProfileSetupScreen extends StatefulWidget {
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _bioCtrl;
+  late final TextEditingController _ageCtrl;
+  late final TextEditingController _heightCtrl;
 
   Uint8List? _photoBytes;
+  String? _gender;
+  String? _bodyShape;
+  String? _hairColour;
 
   @override
   void initState() {
     super.initState();
-    final initial = widget.initial;
-    _nameCtrl = TextEditingController(text: initial?.profile.name ?? '');
-    _bioCtrl = TextEditingController(text: initial?.profile.bio ?? '');
-    _photoBytes = initial?.photoBytes.isNotEmpty == true
-        ? initial!.photoBytes
+    final p = widget.initial?.profile;
+    _nameCtrl = TextEditingController(text: p?.name ?? '');
+    _bioCtrl = TextEditingController(text: p?.bio ?? '');
+    _ageCtrl = TextEditingController(text: p?.age?.toString() ?? '');
+    _heightCtrl = TextEditingController(text: p?.height?.toString() ?? '');
+    _gender = p?.gender;
+    _bodyShape = p?.bodyShape;
+    _hairColour = p?.hairColour;
+    _photoBytes = widget.initial?.photoBytes.isNotEmpty == true
+        ? widget.initial!.photoBytes
         : null;
 
     _nameCtrl.addListener(_onChanged);
@@ -70,6 +76,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _bioCtrl.dispose();
+    _ageCtrl.dispose();
+    _heightCtrl.dispose();
     super.dispose();
   }
 
@@ -92,7 +100,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       profile: ProfileModel(
         name: _nameCtrl.text.trim(),
         bio: _bioCtrl.text.trim(),
-        photoUrl: widget.initial?.profile.photoUrl,
+        // 'local' marks that the photo lives in photoBytes, satisfying isComplete.
+        photoUrl: 'local',
+        gender: _gender,
+        age: int.tryParse(_ageCtrl.text),
+        height: int.tryParse(_heightCtrl.text),
+        bodyShape: _bodyShape,
+        hairColour: _hairColour,
       ),
       photoBytes: _photoBytes!,
     );
@@ -131,7 +145,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
               const SizedBox(height: 32),
 
-              // ── Name ───────────────────────────────────────────────────────
+              // ── Required fields ────────────────────────────────────────────
               TextFormField(
                 key: const Key('name-field'),
                 controller: _nameCtrl,
@@ -146,7 +160,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
               const SizedBox(height: 16),
 
-              // ── Bio ────────────────────────────────────────────────────────
               TextFormField(
                 key: const Key('bio-field'),
                 controller: _bioCtrl,
@@ -155,9 +168,82 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   hintText: 'A sentence about yourself',
                   border: OutlineInputBorder(),
                 ),
-                textInputAction: TextInputAction.done,
+                textInputAction: TextInputAction.next,
                 maxLines: 3,
                 maxLength: 120,
+              ),
+
+              const SizedBox(height: 24),
+
+              // ── Optional fields ────────────────────────────────────────────
+              Text(
+                'About you (optional)',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              _DropdownField(
+                key: const Key('gender-field'),
+                label: 'Gender',
+                value: _gender,
+                options: kGenderOptions,
+                onChanged: (v) => setState(() => _gender = v),
+              ),
+
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      key: const Key('age-field'),
+                      controller: _ageCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Age',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      textInputAction: TextInputAction.next,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      key: const Key('height-field'),
+                      controller: _heightCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Height (cm)',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      textInputAction: TextInputAction.next,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              _DropdownField(
+                key: const Key('body-shape-field'),
+                label: 'Body shape',
+                value: _bodyShape,
+                options: kBodyShapeOptions,
+                onChanged: (v) => setState(() => _bodyShape = v),
+              ),
+
+              const SizedBox(height: 12),
+
+              _DropdownField(
+                key: const Key('hair-colour-field'),
+                label: 'Hair colour',
+                value: _hairColour,
+                options: kHairColourOptions,
+                onChanged: (v) => setState(() => _hairColour = v),
               ),
 
               const SizedBox(height: 32),
@@ -180,7 +266,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// Photo area sub-widget
+// Photo area
 // ---------------------------------------------------------------------------
 
 class _PhotoArea extends StatelessWidget {
@@ -228,6 +314,41 @@ class _PhotoArea extends StatelessWidget {
         size: 40,
         color: colorScheme.onSurfaceVariant,
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reusable dropdown
+// ---------------------------------------------------------------------------
+
+class _DropdownField extends StatelessWidget {
+  const _DropdownField({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String? value;
+  final List<String> options;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      initialValue: value,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+      items: [
+        const DropdownMenuItem(value: null, child: Text('—')),
+        for (final o in options) DropdownMenuItem(value: o, child: Text(o)),
+      ],
+      onChanged: onChanged,
     );
   }
 }

@@ -222,14 +222,22 @@ class _HookupHomeState extends State<HookupHome> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (_profileComplete)
+                          Text(
+                            _myProfile!.profile.name,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
                         GestureDetector(
                           onTap: _openProfileSetup,
                           child: Text(
-                            _profileComplete
-                                ? _myProfile!.profile.name
+                            _myProfile != null
+                                ? 'Update profile'
                                 : 'Tap to set up profile',
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
                           ),
                         ),
                         const SizedBox(height: 8),
