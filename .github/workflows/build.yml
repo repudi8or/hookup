@@ -99,20 +99,20 @@ jobs:
           if [ -z "$plugin_dir" ]; then
             echo "Plugin iOS dir not found — skipping patch"; exit 0
           fi
-          # 1. Create correctly-named podspec with updated s.name
           src="$plugin_dir/flutter_nearby_connections.podspec"
           dst="$plugin_dir/flutter_nearby_connections_plus.podspec"
           if [ -f "$src" ] && [ ! -f "$dst" ]; then
-            sed "s/s\.name\s*=\s*'flutter_nearby_connections'/s.name             = 'flutter_nearby_connections_plus'/" \
+            perl -pe "s/'flutter_nearby_connections'/'flutter_nearby_connections_plus'/" \
               "$src" > "$dst"
             echo "Created podspec: $dst"
           fi
-          # 2. Fix the Swift bridging header import in the ObjC plugin file
           m_file="$plugin_dir/Classes/FlutterNearbyConnectionsPlugin.m"
           if [ -f "$m_file" ]; then
-            sed -i '' \
-              's/flutter_nearby_connections\/flutter_nearby_connections-Swift\.h/flutter_nearby_connections_plus\/flutter_nearby_connections_plus-Swift.h/g;
-               s/"flutter_nearby_connections-Swift\.h"/"flutter_nearby_connections_plus-Swift.h"/g' \
+            perl -i -pe \
+              's|flutter_nearby_connections/flutter_nearby_connections-Swift\.h|flutter_nearby_connections_plus/flutter_nearby_connections_plus-Swift.h|g' \
+              "$m_file"
+            perl -i -pe \
+              's|"flutter_nearby_connections-Swift\.h"|"flutter_nearby_connections_plus-Swift.h"|g' \
               "$m_file"
             echo "Patched Swift header import in: $m_file"
           fi
