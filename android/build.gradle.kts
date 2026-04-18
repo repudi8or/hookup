@@ -24,15 +24,21 @@ subprojects {
         if (androidExt != null && androidExt.namespace == null) {
             androidExt.namespace = project.group.toString()
         }
-    }
-    // Pin Java and Kotlin to the same target so plugins with mismatched defaults don't fail.
-    tasks.withType<JavaCompile>().configureEach {
-        sourceCompatibility = JavaVersion.VERSION_11.toString()
-        targetCompatibility = JavaVersion.VERSION_11.toString()
-    }
-    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+        // After the library's own build.gradle runs and sets compileOptions, align
+        // the Kotlin JVM target to match so AGP's consistency check passes.
+        afterEvaluate {
+            val javaTarget = extensions
+                .findByType(com.android.build.gradle.LibraryExtension::class.java)
+                ?.compileOptions?.targetCompatibility?.toString()
+            if (javaTarget != null) {
+                tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+                    compilerOptions {
+                        jvmTarget.set(
+                            org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(javaTarget)
+                        )
+                    }
+                }
+            }
         }
     }
 }
