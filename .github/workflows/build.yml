@@ -95,7 +95,8 @@ jobs:
       - name: Patch flutter_nearby_connections_plus iOS podspec and Swift header import
         run: |
           plugin_dir=$(find "$HOME/.pub-cache" -type d \
-                       -path "*/flutter_nearby_connections_plus-*/ios" 2>/dev/null | head -1)
+                       -path "*/flutter_nearby_connections_plus-*/ios" \
+                       -not -path "*/example*" 2>/dev/null | head -1)
           if [ -z "$plugin_dir" ]; then
             echo "Plugin iOS dir not found — skipping patch"; exit 0
           fi
