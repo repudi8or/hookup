@@ -101,10 +101,12 @@ jobs:
           fi
           src="$plugin_dir/flutter_nearby_connections.podspec"
           dst="$plugin_dir/flutter_nearby_connections_plus.podspec"
-          if [ -f "$src" ] && [ ! -f "$dst" ]; then
+          if [ -f "$src" ]; then
             perl -pe "s/'flutter_nearby_connections'/'flutter_nearby_connections_plus'/" \
               "$src" > "$dst"
-            echo "Created podspec: $dst"
+            echo "Created/updated podspec: $dst"
+          else
+            echo "Source podspec not found at: $src"; exit 1
           fi
           m_file="$plugin_dir/Classes/FlutterNearbyConnectionsPlugin.m"
           if [ -f "$m_file" ]; then
