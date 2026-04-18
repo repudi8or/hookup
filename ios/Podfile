@@ -1,3 +1,20 @@
+# flutter_nearby_connections_plus v1.2.2 ships its iOS podspec named
+# 'flutter_nearby_connections.podspec' but CocoaPods ≥1.11 expects the filename
+# to match the pub package name. Copy it with the corrected name and s.name.
+require 'fileutils'
+_plus_ios = File.join(__dir__, '.symlinks', 'plugins',
+                       'flutter_nearby_connections_plus', 'ios')
+if File.directory?(_plus_ios)
+  _src = File.join(_plus_ios, 'flutter_nearby_connections.podspec')
+  _dst = File.join(_plus_ios, 'flutter_nearby_connections_plus.podspec')
+  if File.exist?(_src) && !File.exist?(_dst)
+    File.write(_dst, File.read(_src).sub(
+      "s.name             = 'flutter_nearby_connections'",
+      "s.name             = 'flutter_nearby_connections_plus'"
+    ))
+  end
+end
+
 # Uncomment this line to define a global platform for your project
 # platform :ios, '13.0'
 
