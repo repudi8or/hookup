@@ -92,17 +92,29 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Patch flutter_nearby_connections_plus iOS podspec name
+      - name: Patch flutter_nearby_connections_plus iOS podspec and Swift header import
         run: |
-          src=$(find "$HOME/.pub-cache" -name "flutter_nearby_connections.podspec" \
-                -path "*/flutter_nearby_connections_plus*" 2>/dev/null | head -1)
-          if [ -n "$src" ]; then
-            dst="$(dirname "$src")/flutter_nearby_connections_plus.podspec"
-            [ ! -f "$dst" ] && sed \
-              "s/s\.name[[:space:]]*=[[:space:]]*'flutter_nearby_connections'/s.name             = 'flutter_nearby_connections_plus'/" \
-              "$src" > "$dst" && echo "Patched: $dst"
-          else
-            echo "Podspec not found — skipping patch"
+          plugin_dir=$(find "$HOME/.pub-cache" -type d \
+                       -path "*/flutter_nearby_connections_plus-*/ios" 2>/dev/null | head -1)
+          if [ -z "$plugin_dir" ]; then
+            echo "Plugin iOS dir not found — skipping patch"; exit 0
+          fi
+          # 1. Create correctly-named podspec with updated s.name
+          src="$plugin_dir/flutter_nearby_connections.podspec"
+          dst="$plugin_dir/flutter_nearby_connections_plus.podspec"
+          if [ -f "$src" ] && [ ! -f "$dst" ]; then
+            sed "s/s\.name\s*=\s*'flutter_nearby_connections'/s.name             = 'flutter_nearby_connections_plus'/" \
+              "$src" > "$dst"
+            echo "Created podspec: $dst"
+          fi
+          # 2. Fix the Swift bridging header import in the ObjC plugin file
+          m_file="$plugin_dir/Classes/FlutterNearbyConnectionsPlugin.m"
+          if [ -f "$m_file" ]; then
+            sed -i '' \
+              's/flutter_nearby_connections\/flutter_nearby_connections-Swift\.h/flutter_nearby_connections_plus\/flutter_nearby_connections_plus-Swift.h/g;
+               s/"flutter_nearby_connections-Swift\.h"/"flutter_nearby_connections_plus-Swift.h"/g' \
+              "$m_file"
+            echo "Patched Swift header import in: $m_file"
           fi
 
       - name: Build iOS (no code signing)

@@ -1,6 +1,7 @@
 # flutter_nearby_connections_plus v1.2.2 ships its iOS podspec named
-# 'flutter_nearby_connections.podspec' but CocoaPods ≥1.11 expects the filename
-# to match the pub package name. Copy it with the corrected name and s.name.
+# 'flutter_nearby_connections.podspec' but CocoaPods ≥1.11 requires the
+# filename to match the pub package name. Also patch the ObjC bridging header
+# import so it references the renamed module.
 require 'fileutils'
 _plus_ios = File.join(__dir__, '.symlinks', 'plugins',
                        'flutter_nearby_connections_plus', 'ios')
@@ -8,10 +9,19 @@ if File.directory?(_plus_ios)
   _src = File.join(_plus_ios, 'flutter_nearby_connections.podspec')
   _dst = File.join(_plus_ios, 'flutter_nearby_connections_plus.podspec')
   if File.exist?(_src) && !File.exist?(_dst)
-    File.write(_dst, File.read(_src).sub(
-      "s.name             = 'flutter_nearby_connections'",
-      "s.name             = 'flutter_nearby_connections_plus'"
-    ))
+    File.write(_dst, File.read(_src)
+      .sub("s.name             = 'flutter_nearby_connections'",
+           "s.name             = 'flutter_nearby_connections_plus'"))
+  end
+  _m = File.join(_plus_ios, 'Classes', 'FlutterNearbyConnectionsPlugin.m')
+  if File.exist?(_m)
+    content = File.read(_m)
+    patched = content
+      .gsub('flutter_nearby_connections/flutter_nearby_connections-Swift.h',
+            'flutter_nearby_connections_plus/flutter_nearby_connections_plus-Swift.h')
+      .gsub('"flutter_nearby_connections-Swift.h"',
+            '"flutter_nearby_connections_plus-Swift.h"')
+    File.write(_m, patched) if patched != content
   end
 end
 
