@@ -19,13 +19,10 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 subprojects {
-    afterEvaluate {
-        if (plugins.hasPlugin("com.android.library")) {
-            val androidExt = extensions.findByName("android")
-                as? com.android.build.gradle.LibraryExtension
-            if (androidExt != null && androidExt.namespace == null) {
-                androidExt.namespace = project.group.toString()
-            }
+    plugins.withId("com.android.library") {
+        val androidExt = extensions.findByType(com.android.build.gradle.LibraryExtension::class.java)
+        if (androidExt != null && androidExt.namespace == null) {
+            androidExt.namespace = project.group.toString()
         }
     }
 }
