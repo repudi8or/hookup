@@ -92,6 +92,19 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Patch flutter_nearby_connections_plus iOS podspec name
+        run: |
+          src=$(find "$HOME/.pub-cache" -name "flutter_nearby_connections.podspec" \
+                -path "*/flutter_nearby_connections_plus*" 2>/dev/null | head -1)
+          if [ -n "$src" ]; then
+            dst="$(dirname "$src")/flutter_nearby_connections_plus.podspec"
+            [ ! -f "$dst" ] && sed \
+              "s/s\.name[[:space:]]*=[[:space:]]*'flutter_nearby_connections'/s.name             = 'flutter_nearby_connections_plus'/" \
+              "$src" > "$dst" && echo "Patched: $dst"
+          else
+            echo "Podspec not found — skipping patch"
+          fi
+
       - name: Build iOS (no code signing)
         run: flutter build ios --no-codesign --debug
 
