@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'src/widgets/broadcast_toggle.dart';
 import 'src/widgets/filter_panel.dart';
 import 'src/widgets/nearby_screen.dart';
+import 'src/widgets/profile_setup_screen.dart';
 import 'src/peer_cache.dart';
 import 'src/peer_filter.dart';
 import 'src/profile_bundle_codec.dart';
@@ -86,11 +87,28 @@ final _allFakePeers = [
 // ---------------------------------------------------------------------------
 
 class _HookupHomeState extends State<HookupHome> {
-  bool _profileComplete = false;
+  ProfileBundle? _myProfile;
   bool _broadcasting = false;
   List<DiscoveredPeer> _fakePeers = [];
   PeerFilter _filter = const PeerFilter();
   bool _filterExpanded = false;
+
+  bool get _profileComplete => _myProfile?.profile.isComplete ?? false;
+
+  Future<void> _openProfileSetup() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfileSetupScreen(
+          initial: _myProfile,
+          onSaved: (bundle) {
+            setState(() => _myProfile = bundle);
+            Navigator.pop(context);
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -107,25 +125,43 @@ class _HookupHomeState extends State<HookupHome> {
                 children: [
                   Image.asset('assets/icon/icon.jpeg', width: 80, height: 80),
                   const SizedBox(width: 12),
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.primaryContainer,
-                    child: Icon(
-                      Icons.person,
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    ),
+                  GestureDetector(
+                    onTap: _openProfileSetup,
+                    child:
+                        _myProfile != null && _myProfile!.photoBytes.isNotEmpty
+                        ? CircleAvatar(
+                            radius: 28,
+                            backgroundImage: MemoryImage(
+                              _myProfile!.photoBytes,
+                            ),
+                          )
+                        : CircleAvatar(
+                            radius: 28,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primaryContainer,
+                            child: Icon(
+                              Icons.person,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onPrimaryContainer,
+                            ),
+                          ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _profileComplete ? 'Your Name' : 'Profile incomplete',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
+                        GestureDetector(
+                          onTap: _openProfileSetup,
+                          child: Text(
+                            _profileComplete
+                                ? _myProfile!.profile.name
+                                : 'Tap to set up profile',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
                         ),
                         const SizedBox(height: 8),
                         BroadcastToggle(
@@ -146,20 +182,6 @@ class _HookupHomeState extends State<HookupHome> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  OutlinedButton.icon(
-                    onPressed: () =>
-                        setState(() => _profileComplete = !_profileComplete),
-                    icon: Icon(
-                      _profileComplete
-                          ? Icons.check_circle
-                          : Icons.circle_outlined,
-                    ),
-                    label: Text(
-                      _profileComplete
-                          ? 'Profile complete (tap to clear)'
-                          : 'Simulate profile completion',
-                    ),
-                  ),
                   OutlinedButton.icon(
                     onPressed: () => setState(() {
                       _fakePeers = _fakePeers.isEmpty ? _allFakePeers : [];
