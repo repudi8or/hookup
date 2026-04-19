@@ -60,9 +60,7 @@ jobs:
                -path "*/flutter_nearby_connections_plus-*" \
                -not -path "*/example*" 2>/dev/null | head -1)
           if [ -n "$kt" ]; then
-            perl -i -pe 's/^import io\.flutter\.plugin\.common\.PluginRegistry\.Registrar.*\n//' "$kt"
-            perl -i -0pe 's/\s*@JvmStatic\s*\n\s*fun registerWith\(registrar: Registrar\).*?\}//s' "$kt"
-            echo "Patched: $kt"
+            python3 scripts/patch_nearby_connections_android.py "$kt"
           else
             echo "Kotlin plugin file not found — skipping patch"; exit 1
           fi
