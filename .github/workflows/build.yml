@@ -54,6 +54,10 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Set version from run number
+        run: |
+          sed -i "s/^version:.*/version: 0.0.${{ github.run_number }}+${{ github.run_number }}/" pubspec.yaml
+
       - name: Patch flutter_nearby_connections_plus Android Registrar reference
         run: |
           kt=$(find "$HOME/.pub-cache" -name "FlutterNearbyConnectionsPlugin.kt" \

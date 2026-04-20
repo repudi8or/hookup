@@ -136,9 +136,7 @@ class _HookupHomeState extends State<HookupHome> {
   }
 
   Future<void> _requestPermissions() async {
-    // Request all permissions needed for Nearby Connections.
-    // On iOS only NSLocalNetworkUsageDescription is needed (granted via dialog).
-    await [
+    final statuses = await [
       Permission.bluetooth,
       Permission.bluetoothScan,
       Permission.bluetoothAdvertise,
@@ -146,6 +144,34 @@ class _HookupHomeState extends State<HookupHome> {
       Permission.locationWhenInUse,
       Permission.nearbyWifiDevices,
     ].request();
+
+    final permanentlyDenied = statuses.values.any((s) => s.isPermanentlyDenied);
+    if (permanentlyDenied && mounted) {
+      showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Permissions required'),
+          content: const Text(
+            'Hookup needs Bluetooth, Location, and Nearby Devices '
+            'permissions to find people nearby. '
+            'Please enable them in Settings.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                openAppSettings();
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   @override
