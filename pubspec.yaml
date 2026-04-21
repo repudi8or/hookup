@@ -36,7 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   image_picker: ^1.1.2
   flutter_image_compress: ^2.3.0
-  flutter_nearby_connections_plus: ^1.2.2
+  bluetooth_low_energy: ^6.2.1
   permission_handler: ^12.0.1
 
 dev_dependencies:

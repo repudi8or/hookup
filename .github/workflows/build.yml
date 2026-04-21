@@ -58,17 +58,6 @@ jobs:
         run: |
           sed -i "s/^version:.*/version: 0.0.${{ github.run_number }}+${{ github.run_number }}/" pubspec.yaml
 
-      - name: Patch flutter_nearby_connections_plus Android Registrar reference
-        run: |
-          kt=$(find "$HOME/.pub-cache" -name "FlutterNearbyConnectionsPlugin.kt" \
-               -path "*/flutter_nearby_connections_plus-*" \
-               -not -path "*/example*" 2>/dev/null | head -1)
-          if [ -n "$kt" ]; then
-            python3 scripts/patch_nearby_connections_android.py "$kt"
-          else
-            echo "Kotlin plugin file not found — skipping patch"; exit 1
-          fi
-
       - name: Build debug APK
         run: flutter build apk --debug
 
@@ -106,34 +95,6 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-
-      - name: Patch flutter_nearby_connections_plus iOS podspec and Swift header import
-        run: |
-          plugin_dir=$(find "$HOME/.pub-cache" -type d \
-                       -path "*/flutter_nearby_connections_plus-*/ios" \
-                       -not -path "*/example*" 2>/dev/null | head -1)
-          if [ -z "$plugin_dir" ]; then
-            echo "Plugin iOS dir not found — skipping patch"; exit 0
-          fi
-          src="$plugin_dir/flutter_nearby_connections.podspec"
-          dst="$plugin_dir/flutter_nearby_connections_plus.podspec"
-          if [ -f "$src" ]; then
-            perl -pe "s/'flutter_nearby_connections'/'flutter_nearby_connections_plus'/" \
-              "$src" > "$dst"
-            echo "Created/updated podspec: $dst"
-          else
-            echo "Source podspec not found at: $src"; exit 1
-          fi
-          m_file="$plugin_dir/Classes/FlutterNearbyConnectionsPlugin.m"
-          if [ -f "$m_file" ]; then
-            perl -i -pe \
-              's|flutter_nearby_connections/flutter_nearby_connections-Swift\.h|flutter_nearby_connections_plus/flutter_nearby_connections_plus-Swift.h|g' \
-              "$m_file"
-            perl -i -pe \
-              's|"flutter_nearby_connections-Swift\.h"|"flutter_nearby_connections_plus-Swift.h"|g' \
-              "$m_file"
-            echo "Patched Swift header import in: $m_file"
-          fi
 
       - name: Build iOS (no code signing)
         run: flutter build ios --no-codesign --debug

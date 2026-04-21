@@ -4,8 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'src/ble_nearby_service.dart';
 import 'src/nearby_controller.dart';
-import 'src/nearby_service_impl.dart';
 import 'src/peer_cache.dart';
 import 'src/peer_filter.dart';
 import 'src/profile_bundle_codec.dart';
@@ -102,7 +102,7 @@ class _HookupHomeState extends State<HookupHome> {
   PeerFilter _filter = const PeerFilter();
   bool _filterExpanded = false;
 
-  late final FlutterNearbyConnectionsService _nearbyService;
+  late final BleNearbyService _nearbyService;
   late final NearbyController _controller;
 
   bool get _profileComplete => _myProfile?.profile.isComplete ?? false;
@@ -112,7 +112,7 @@ class _HookupHomeState extends State<HookupHome> {
   @override
   void initState() {
     super.initState();
-    _nearbyService = FlutterNearbyConnectionsService();
+    _nearbyService = BleNearbyService();
     _controller = NearbyController(
       service: _nearbyService,
       cache: PeerCache(),
@@ -141,8 +141,7 @@ class _HookupHomeState extends State<HookupHome> {
       Permission.bluetoothScan,
       Permission.bluetoothAdvertise,
       Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
-      Permission.nearbyWifiDevices,
+      Permission.locationWhenInUse, // required for BLE scan on Android < 12
     ].request();
 
     final permanentlyDenied = statuses.values.any((s) => s.isPermanentlyDenied);
