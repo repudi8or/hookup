@@ -240,6 +240,12 @@ class BleNearbyService implements NearbyServiceInterface {
   @override
   Future<void> acceptConnection(String endpointId) async {}
 
+  @override
+  Future<void> setOwnProfileBytes(Uint8List bytes) async {
+    debugPrint('[BLE] setOwnProfileBytes: ${bytes.length} B');
+    _ownProfileBytes = bytes;
+  }
+
   /// Stores [bytes] as the local profile (served on read requests) and
   /// immediately reads the remote's profile characteristic, emitting
   /// [PeerDataReceived] on success.

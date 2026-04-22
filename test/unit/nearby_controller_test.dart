@@ -51,6 +51,7 @@ void main() {
     ).thenAnswer((_) async {});
     when(() => service.acceptConnection(any())).thenAnswer((_) async {});
     when(() => service.sendBytes(any(), any())).thenAnswer((_) async {});
+    when(() => service.setOwnProfileBytes(any())).thenAnswer((_) async {});
     when(() => service.disconnect(any())).thenAnswer((_) async {});
 
     controller = NearbyController(
@@ -68,6 +69,21 @@ void main() {
 
   // Lets the event stream deliver to listeners before asserting.
   Future<void> pump() => Future.microtask(() {});
+
+  group('NearbyController — startup', () {
+    test('start pre-populates own profile bytes in the service', () {
+      verify(() => service.setOwnProfileBytes(any())).called(1);
+    });
+
+    test('start encodes own bundle and passes it to setOwnProfileBytes', () {
+      final captured =
+          verify(() => service.setOwnProfileBytes(captureAny())).captured.single
+              as Uint8List;
+
+      final decoded = ProfileBundleCodec.decode(captured);
+      expect(decoded.profile.name, equals('Me'));
+    });
+  });
 
   group('NearbyController — peer discovery', () {
     test('requests connection when a peer is discovered', () async {

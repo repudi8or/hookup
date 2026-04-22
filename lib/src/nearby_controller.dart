@@ -43,6 +43,24 @@ class NearbyController {
   void start() {
     _service.startDiscovery();
     _subscription = _service.events.listen(_onEvent);
+    _prePopulateOwnProfile();
+  }
+
+  void _prePopulateOwnProfile() {
+    try {
+      final bundle = _ownBundle();
+      if (bundle.photoBytes.isEmpty) return;
+      final bytes = ProfileBundleCodec.encode(
+        bundle.profile,
+        bundle.photoBytes,
+      );
+      _service.setOwnProfileBytes(bytes);
+      debugPrint('[HOOKUP] Pre-populated own profile: ${bytes.length} B');
+    } on ProfileBundleTooLargeException catch (e) {
+      debugPrint('[HOOKUP] Own bundle too large at startup: $e');
+    } catch (e) {
+      debugPrint('[HOOKUP] Could not pre-populate own profile: $e');
+    }
   }
 
   /// Enable or disable advertising (broadcast mode).

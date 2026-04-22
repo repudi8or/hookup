@@ -408,6 +408,15 @@ void main() {
     );
   });
 
+  group('BleNearbyService — setOwnProfileBytes', () {
+    test('completes without error', () async {
+      await expectLater(
+        service.setOwnProfileBytes(Uint8List.fromList([10, 20, 30])),
+        completes,
+      );
+    });
+  });
+
   group('BleNearbyService — advertising', () {
     test('startAdvertising delegates to PeripheralManager', () async {
       await service.startAdvertising('hookup');
