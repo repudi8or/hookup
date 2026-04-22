@@ -80,7 +80,12 @@ class BleNearbyService implements NearbyServiceInterface {
     if (state == BluetoothLowEnergyState.unauthorized && Platform.isAndroid) {
       await _central.authorize();
     } else if (state == BluetoothLowEnergyState.poweredOn && _wantDiscovery) {
-      await _central.startDiscovery(serviceUUIDs: [serviceUUID]);
+      try {
+        await _central.startDiscovery(serviceUUIDs: [serviceUUID]);
+        debugPrint('[BLE] discovery started');
+      } catch (e) {
+        debugPrint('[BLE] startDiscovery error: $e');
+      }
     }
   }
 
@@ -99,45 +104,51 @@ class BleNearbyService implements NearbyServiceInterface {
   }
 
   Future<void> _doStartAdvertising() async {
-    if (!_serviceAdded) {
-      final profileChar = GATTCharacteristic.mutable(
-        uuid: profileCharUUID,
-        properties: [GATTCharacteristicProperty.read],
-        permissions: [GATTCharacteristicPermission.read],
-        descriptors: [],
+    try {
+      if (!_serviceAdded) {
+        debugPrint('[BLE] adding GATT service…');
+        final profileChar = GATTCharacteristic.mutable(
+          uuid: profileCharUUID,
+          properties: [GATTCharacteristicProperty.read],
+          permissions: [GATTCharacteristicPermission.read],
+          descriptors: [],
+        );
+        final service = GATTService(
+          uuid: serviceUUID,
+          isPrimary: true,
+          includedServices: [],
+          characteristics: [profileChar],
+        );
+        await _peripheral.addService(service);
+        _serviceAdded = true;
+        debugPrint('[BLE] GATT service added');
+      }
+      debugPrint('[BLE] starting advertising…');
+      await _peripheral.startAdvertising(
+        Advertisement(
+          name: _advertisingName ?? 'hookup',
+          serviceUUIDs: [serviceUUID],
+        ),
       );
-      final service = GATTService(
-        uuid: serviceUUID,
-        isPrimary: true,
-        includedServices: [],
-        characteristics: [profileChar],
-      );
-      await _peripheral.addService(service);
-      _serviceAdded = true;
+      debugPrint('[BLE] advertising started');
+    } catch (e) {
+      debugPrint('[BLE] advertising error: $e');
     }
-    await _peripheral.startAdvertising(
-      Advertisement(
-        name: _advertisingName ?? 'hookup',
-        serviceUUIDs: [serviceUUID],
-      ),
-    );
   }
 
   void _onDiscovered(DiscoveredEventArgs args) {
     final endpointId = args.peripheral.uuid.toString();
+    final name = args.advertisement.name ?? endpointId;
+    debugPrint('[BLE] discovered peer $endpointId ($name) rssi=${args.rssi}');
     _peripheralMap[endpointId] = args.peripheral;
-    _eventCtrl.add(
-      PeerDiscovered(
-        endpointId: endpointId,
-        displayName: args.advertisement.name ?? endpointId,
-      ),
-    );
+    _eventCtrl.add(PeerDiscovered(endpointId: endpointId, displayName: name));
   }
 
   void _onConnectionStateChanged(
     PeripheralConnectionStateChangedEventArgs args,
   ) {
     final endpointId = args.peripheral.uuid.toString();
+    debugPrint('[BLE] connection state $endpointId → ${args.state}');
     if (args.state == ConnectionState.connected) {
       _eventCtrl.add(PeerConnected(endpointId: endpointId));
     } else {
@@ -157,10 +168,15 @@ class BleNearbyService implements NearbyServiceInterface {
 
   @override
   Future<void> startAdvertising(String displayName) async {
+    debugPrint(
+      '[BLE] startAdvertising called (peripheral=${_peripheral.state})',
+    );
     _wantAdvertising = true;
     _advertisingName = displayName;
     if (_peripheral.state == BluetoothLowEnergyState.poweredOn) {
       await _doStartAdvertising();
+    } else {
+      debugPrint('[BLE] advertising deferred — peripheral not poweredOn');
     }
   }
 
@@ -173,9 +189,17 @@ class BleNearbyService implements NearbyServiceInterface {
 
   @override
   Future<void> startDiscovery() async {
+    debugPrint('[BLE] startDiscovery called (central=${_central.state})');
     _wantDiscovery = true;
     if (_central.state == BluetoothLowEnergyState.poweredOn) {
-      await _central.startDiscovery(serviceUUIDs: [serviceUUID]);
+      try {
+        await _central.startDiscovery(serviceUUIDs: [serviceUUID]);
+        debugPrint('[BLE] discovery started');
+      } catch (e) {
+        debugPrint('[BLE] startDiscovery error: $e');
+      }
+    } else {
+      debugPrint('[BLE] discovery deferred — central not poweredOn');
     }
   }
 
@@ -220,8 +244,8 @@ class BleNearbyService implements NearbyServiceInterface {
       _eventCtrl.add(
         PeerDataReceived(endpointId: endpointId, bytes: profileBytes),
       );
-    } catch (_) {
-      // Peer disconnected or doesn't expose our service — ignore.
+    } catch (e) {
+      debugPrint('[BLE] readRemoteProfile $endpointId error: $e');
     }
   }
 
