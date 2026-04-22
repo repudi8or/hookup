@@ -236,28 +236,26 @@ class _Body extends StatelessWidget {
                 toggleKey: const Key('filter-toggle-age'),
                 enabled: ageEnabled,
                 onEnabledChanged: onAgeEnabledChanged,
-                sliderChild: ageEnabled
-                    ? RangeSlider(
-                        key: const Key('filter-slider-age'),
-                        values: RangeValues(
-                          filter.ageMin.toDouble(),
-                          filter.ageMax.toDouble(),
-                        ),
-                        min: kAgeMin.toDouble(),
-                        max: kAgeMax.toDouble(),
-                        divisions: kAgeMax - kAgeMin,
-                        labels: RangeLabels(
-                          filter.ageMin.toString(),
-                          filter.ageMax.toString(),
-                        ),
-                        onChanged: (v) => onChanged(
-                          filter.copyWith(
-                            ageMin: v.start.round(),
-                            ageMax: v.end.round(),
-                          ),
-                        ),
-                      )
-                    : null,
+                sliderChild: RangeSlider(
+                  key: const Key('filter-slider-age'),
+                  values: RangeValues(
+                    filter.ageMin.toDouble(),
+                    filter.ageMax.toDouble(),
+                  ),
+                  min: kAgeMin.toDouble(),
+                  max: kAgeMax.toDouble(),
+                  divisions: kAgeMax - kAgeMin,
+                  labels: RangeLabels(
+                    filter.ageMin.toString(),
+                    filter.ageMax.toString(),
+                  ),
+                  onChanged: (v) => onChanged(
+                    filter.copyWith(
+                      ageMin: v.start.round(),
+                      ageMax: v.end.round(),
+                    ),
+                  ),
+                ),
               ),
 
               // Height range
@@ -268,28 +266,26 @@ class _Body extends StatelessWidget {
                 toggleKey: const Key('filter-toggle-height'),
                 enabled: heightEnabled,
                 onEnabledChanged: onHeightEnabledChanged,
-                sliderChild: heightEnabled
-                    ? RangeSlider(
-                        key: const Key('filter-slider-height'),
-                        values: RangeValues(
-                          filter.heightMin.toDouble(),
-                          filter.heightMax.toDouble(),
-                        ),
-                        min: kHeightMin.toDouble(),
-                        max: kHeightMax.toDouble(),
-                        divisions: kHeightMax - kHeightMin,
-                        labels: RangeLabels(
-                          '${filter.heightMin} cm',
-                          '${filter.heightMax} cm',
-                        ),
-                        onChanged: (v) => onChanged(
-                          filter.copyWith(
-                            heightMin: v.start.round(),
-                            heightMax: v.end.round(),
-                          ),
-                        ),
-                      )
-                    : null,
+                sliderChild: RangeSlider(
+                  key: const Key('filter-slider-height'),
+                  values: RangeValues(
+                    filter.heightMin.toDouble(),
+                    filter.heightMax.toDouble(),
+                  ),
+                  min: kHeightMin.toDouble(),
+                  max: kHeightMax.toDouble(),
+                  divisions: kHeightMax - kHeightMin,
+                  labels: RangeLabels(
+                    '${filter.heightMin} cm',
+                    '${filter.heightMax} cm',
+                  ),
+                  onChanged: (v) => onChanged(
+                    filter.copyWith(
+                      heightMin: v.start.round(),
+                      heightMax: v.end.round(),
+                    ),
+                  ),
+                ),
               ),
 
               const SizedBox(height: 4),
@@ -389,14 +385,14 @@ class _RangeSection extends StatelessWidget {
     required this.toggleKey,
     required this.enabled,
     required this.onEnabledChanged,
-    this.sliderChild,
+    required this.sliderChild,
   });
 
   final String label;
   final Key toggleKey;
   final bool enabled;
   final ValueChanged<bool> onEnabledChanged;
-  final Widget? sliderChild;
+  final Widget sliderChild;
 
   @override
   Widget build(BuildContext context) {
@@ -429,12 +425,16 @@ class _RangeSection extends StatelessWidget {
               ),
             ),
           ),
-          // Slider indented below when enabled
-          if (sliderChild != null)
-            Padding(
+          // Offstage keeps the RangeSlider's render object (and its internal
+          // AnimationController) alive, preventing a crash when a hover event
+          // fires on the slider in the same frame it would otherwise be disposed.
+          Offstage(
+            offstage: !enabled,
+            child: Padding(
               padding: const EdgeInsets.only(left: 16),
               child: sliderChild,
             ),
+          ),
         ],
       ),
     );
