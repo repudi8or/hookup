@@ -9,6 +9,7 @@ import 'src/peer_cache.dart';
 import 'src/peer_filter.dart';
 import 'src/profile_bundle_codec.dart';
 import 'src/profile_model.dart';
+import 'src/profile_repository.dart';
 import 'src/widgets/broadcast_toggle.dart';
 import 'src/widgets/filter_panel.dart';
 import 'src/widgets/nearby_screen.dart';
@@ -90,6 +91,7 @@ final _allFakePeers = [
 
 class _HookupHomeState extends State<HookupHome> {
   ProfileBundle? _myProfile;
+  ProfileRepository? _repo;
   bool _broadcasting = false;
 
   // Real discovered peers from Nearby Connections.
@@ -122,7 +124,20 @@ class _HookupHomeState extends State<HookupHome> {
             photoBytes: Uint8List(0),
           ),
     );
-    _initNearby();
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    await _loadProfile();
+    await _initNearby();
+  }
+
+  Future<void> _loadProfile() async {
+    _repo = await ProfileRepository.create();
+    final saved = await _repo!.load();
+    if (saved != null && mounted) {
+      setState(() => _myProfile = saved);
+    }
   }
 
   Future<void> _initNearby() async {
@@ -196,9 +211,10 @@ class _HookupHomeState extends State<HookupHome> {
       MaterialPageRoute(
         builder: (_) => ProfileSetupScreen(
           initial: _myProfile,
-          onSaved: (bundle) {
+          onSaved: (bundle) async {
             setState(() => _myProfile = bundle);
-            Navigator.pop(context);
+            await _repo?.save(bundle);
+            if (mounted) Navigator.pop(context);
           },
         ),
       ),
