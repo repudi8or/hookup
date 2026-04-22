@@ -38,6 +38,12 @@ abstract class NearbyServiceInterface {
   /// Call this from a [ConnectionInitiated] handler to complete the handshake.
   Future<void> acceptConnection(String endpointId);
 
+  /// Store own profile bytes so the peripheral serves them immediately on read.
+  ///
+  /// Call this once at startup (before any peer connects) so that a central
+  /// that reads our GATT characteristic gets the profile rather than 0 bytes.
+  Future<void> setOwnProfileBytes(Uint8List bytes);
+
   /// Send raw bytes to a connected peer.
   Future<void> sendBytes(String endpointId, Uint8List bytes);
 

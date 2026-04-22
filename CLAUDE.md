@@ -37,39 +37,80 @@ The broadcast toggle must remain disabled and visually indicate why (e.g. "Compl
 
 ## Communication Technology
 
-### Strategy: Two-Phase Proximity
+### Current Strategy: BLE Only
 
-The app uses a two-phase approach for maximum range and cross-platform compatibility:
+The app currently uses BLE for both discovery and data exchange. This covers the primary use case (a venue, bar, or room — 30–100m) without any platform-specific Wi-Fi code.
 
-1. **Discovery phase** — BLE advertising: low power, universally supported, passively detectable
-2. **Data exchange phase** — Wi-Fi Aware (Android) / AWDL via Multipeer Connectivity (iOS): higher bandwidth, longer range (~200-300m)
+**Package**: `bluetooth_low_energy: ^6.2.1`
+- Supports Android, iOS, macOS
+- Each device runs both central (scanner) and peripheral (advertiser) roles simultaneously
+- On Android: requires `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `BLUETOOTH_ADVERTISE` permissions (handled by `permission_handler`)
+- On macOS: requires `com.apple.security.device.bluetooth` sandbox entitlement
 
-In practice, the chosen Flutter package handles the BLE → Wi-Fi upgrade automatically under the hood.
+Each device simultaneously:
+1. **Advertises** a GATT peripheral with service UUID `f47ac10b-58cc-4372-a567-0e02b2c3d479`
+2. **Scans** for peripherals advertising that same UUID
 
-### Flutter Package: `flutter_nearby_connections_plus`
+On discovery, the central role device connects and reads the remote's profile characteristic (`f47ac10b-58cc-4372-a567-0e02b2c3d480`). The peripheral serves its own profile bytes in response to read requests. Multi-chunk reads (BLE "Read Long" procedure) are supported — `_onReadRequested` slices `_ownProfileBytes` at `args.request.offset` so profiles larger than the negotiated MTU (~512 bytes) are served correctly across multiple requests.
 
-**Package**: [`flutter_nearby_connections_plus`](https://pub.dev/packages/flutter_nearby_connections_plus)
-- Maintained fork of `flutter_nearby_connections` with bug fixes
-- Supports Android and iOS
-- On Android: wraps Google's Nearby Connections API (BLE + Wi-Fi Aware + Bluetooth)
-- On iOS: wraps Apple's Multipeer Connectivity framework (AWDL + Bluetooth)
+### Future Extension: Wi-Fi Range (~200–300m)
 
-**If the package becomes unmaintained or insufficient, fork it and maintain our own copy.**
+To extend range beyond BLE, the intended architecture is:
 
-### Strategy
+1. **BLE advertising** — discovery only (current)
+2. **Wi-Fi Aware (Android) / AWDL via Multipeer Connectivity (iOS)** — data exchange at 200–300m
 
-Use `Strategy.P2P_CLUSTER` — designed for many-to-many group discovery with no designated host. This matches the "I am here" broadcast model where any device can send and any device can receive.
+There is no cross-platform Wi-Fi P2P solution that works on both Android and iOS without a shared Wi-Fi network — the platforms use entirely different radio stacks:
 
-```dart
-// Discovery + advertising
-nearbyService.init(
-  serviceType: 'hookup',
-  strategy: Strategy.P2P_CLUSTER,
-  callback: (isRunning) { ... },
-);
-nearbyService.startAdvertisingPeer();
-nearbyService.startBrowsingForPeers();
-```
+| Transport | Android | iOS | Cross-platform |
+|---|---|---|---|
+| Wi-Fi Aware (NAN) | Android 8+ | No | No |
+| AWDL / Multipeer Connectivity | No | Yes | No |
+| Wi-Fi Direct (P2P) | Yes | No | No |
+| BLE | Yes | Yes | **Yes** |
+
+The only cross-platform abstraction that bridges both is **Google Nearby Connections**, which routes through Wi-Fi Aware on Android and Multipeer Connectivity on iOS behind a single API. `flutter_nearby_connections_plus` wraps this SDK.
+
+**Why we abandoned it and what a revival requires:**
+
+`flutter_nearby_connections_plus` was evaluated and abandoned. It required patching Kotlin internals (`Registrar` API removed in newer Android SDK versions) and the package is unmaintained. To revive Wi-Fi range:
+
+1. **Fork `flutter_nearby_connections_plus`** (or write a fresh plugin from scratch)
+2. **Fix the Android side** — replace all usages of the removed `io.flutter.plugin.common.PluginRegistry.Registrar` API with the current `FlutterPlugin` / `ActivityAware` plugin lifecycle. This is native Kotlin work (~1–2 days).
+3. **Verify the iOS side** — Multipeer Connectivity bindings were less broken but need auditing against the current Flutter iOS plugin API.
+4. **Replace `NearbyServiceInterface` implementation** — swap `BleNearbyService` for a `NearbyConnectionsService` that implements the same interface. `NearbyController` and all tests remain unchanged.
+
+Until that work is done, BLE-only is the correct choice. The `NearbyServiceInterface` abstraction boundary is already designed to make this swap a drop-in replacement.
+
+### Future Extension: Short-Link Profile Exchange (Internet Required)
+
+An alternative to Wi-Fi for richer profile data is to exchange a short URL via BLE instead of the full profile bundle. The central reads a small characteristic containing a link (e.g. `https://hookup.app/p/abc123`) and opens it to load an extended profile from a server.
+
+**How it would work:**
+1. Each user has a server-side profile at a short URL, generated on sign-in
+2. The BLE peripheral serves the short URL (< 64 bytes — well within a single MTU read)
+3. On connection, central reads the URL and fetches the full profile over HTTPS
+4. The full profile can include high-res photos, links, and richer fields — not constrained by BLE payload limits
+
+**Trade-offs vs. current BLE bundle approach:**
+
+| | BLE bundle (current) | Short-link |
+|---|---|---|
+| Internet required | No | Yes |
+| Profile size | <15KB | Unlimited |
+| Latency | ~1–2s (BLE read) | ~1–2s (BLE read) + HTTP fetch |
+| Privacy | Local only | Server holds profile data |
+| Works offline | Yes | No |
+
+**Caveats:**
+- Requires a backend (auth, profile storage, URL generation)
+- Profile data leaves the device and is stored server-side — changes the privacy model significantly
+- The two approaches are not mutually exclusive: BLE bundle for offline/anonymous use; short-link opt-in for users who want richer profiles and are willing to create an account
+
+**Implementation sketch:**
+- Add a `profileUrl` field to the GATT service as a second characteristic
+- `NearbyController` reads it and emits a `PeerLinkReceived` event alongside (or instead of) `PeerDataReceived`
+- The UI fetches and caches the remote profile; falls back to the BLE bundle if the fetch fails or there is no network
 
 ### Profile Exchange
 
@@ -107,25 +148,13 @@ Use a single bytes payload (max ~32KB) to keep the transfer simple and atomic. F
 - Hard reject if >15KB after compression
 - Use `flutter_image_compress` to enforce
 
-**Peer caching** — Nearby Connections assigns each device an `endpointId`. Cache received profiles by `endpointId` to avoid re-requesting from already-seen devices. Evict on disconnect or after a timeout:
+**Peer caching** — BLE assigns each peripheral a UUID used as `endpointId`. Cache received profiles by `endpointId` to avoid re-requesting from already-seen devices. Evict on disconnect:
 ```dart
 Map<String, DiscoveredPeer> _peerCache = {};
 // endpointId → { profileImage, profileData, lastSeen }
 ```
 
 **Privacy** — all profile data is unencrypted and visible to any nearby device running the app. The profile should only contain what a user consciously wants to broadcast publicly. Surface this clearly during onboarding.
-
-### Technology Comparison (researched options)
-
-| Technology | Range | Battery | Android | iOS | No Internet |
-|---|---|---|---|---|---|
-| BLE Advertising | ~30–100m | Low | Yes | Yes | Yes |
-| Wi-Fi Aware (NAN) | ~200–300m | Medium | Android 8+ | No | Yes |
-| Multipeer Connectivity | ~200m | Medium | No | Yes | Yes |
-| Google Nearby Connections | ~200–300m | Medium | Yes | Yes | Yes |
-| 5G ProSe/Sidelink | km-range | — | Rare | No | Yes |
-
-Google Nearby Connections was chosen because it abstracts Wi-Fi Aware (Android) and Multipeer Connectivity (iOS) behind a single cross-platform API.
 
 ## Git Workflow
 
@@ -436,88 +465,53 @@ Minimalist and clean. The face is the signal — profile photos do the heavy lif
 - `cached_network_image` — smooth profile image loading with placeholders
 - `google_fonts` — clean typography
 
-## Architecture & Design Principles
+## Architecture
 
-### The Global State Pattern
+### Layers
 
-**Critical**: hookup uses social login to validate customer and get their email address. It provides a clean and beautiful UI to allow input of the NMI (either 10 or 11 characters). It has a submit button which triggers a call to the request_report api (supplied by dataingestion repo)
-
-**How it works**:
-
-**Implementation**: `lib/src/hookup_state.dart`
-
-
-### Widget Integration
-
-All create custom `Element` subclasses (`_StatelesshookupElement` or `_StatefulhookupElement`) that:
-- Initialize `_hookupState` on mount
-- Set/unset `_activehookupState` around build
-- Dispose watch entries on unmount
-
-### Data Types & Watch Functions
-
-**Hierarchy**:
 ```
-Listenable (base)
-├─ ChangeNotifier
-└─ ValueListenable<T>
-   └─ ValueNotifier<T>
+main.dart (StatefulWidget)
+    │
+    ├── ProfileRepository      — persist/load profile across restarts
+    │       SharedPreferences (text fields) + File (JPEG photo)
+    │       flutter_image_compress compresses photo on save
+    │
+    └── NearbyController       — pure Dart, fully unit-testable
+            │
+            ├── NearbyServiceInterface (abstract)
+            │       ↓ implemented by
+            │   BleNearbyService
+            │       CentralManager — scans, connects, reads GATT chars
+            │       PeripheralManager — advertises, serves read requests
+            │
+            └── PeerCache      — endpointId → DiscoveredPeer, evict on disconnect
 ```
 
-**Implementation**: All in `lib/src/hookup.dart`
+### BLE Flow
 
-### Handler Pattern (Side Effects)
-
-Handlers execute side effects (show dialogs, navigation, etc.) instead of rebuilding:
-- `registerHandler()` - For `ValueListenable` changes
-- `registerChangeNotifierHandler()` - For `ChangeNotifier` changes
-- `registerStreamHandler()` - For `Stream` events
-- `registerFutureHandler()` - For `Future` completion
-
-**Key difference**: Handlers receive a `cancel()` function to unsubscribe from inside the handler.
-
-### Lifecycle Helpers
-
-- `createOnce()` - Create objects on first build, auto-dispose on widget destroy
-- `createOnceAsync()` - Async version, returns `AsyncSnapshot<T>`
-- `callOnce()` - Execute function once on first build
-- `onDispose()` - Register dispose callback
-- `pushScope()` - Push get_it scope tied to widget lifecycle
-
-**Use case**: Creating `TextEditingController`, `AnimationController`, etc. in stateless widgets
-
-### Tracing & Debugging
-
-Two-level tracing system:
-
-1. **Widget-level**: Call `enableTracing()` at start of build
-2. **Subtree-level**: Wrap with `hookupSubTreeTraceControl` widget
-
-**Performance consideration**: Subtree tracing only active if `enableSubTreeTracing = true` globally (checked in `_checkSubTreeTracing()`)
-
-**Custom logging**: Override `hookupLogFunction` to integrate with analytics/monitoring
-
-**Events tracked**: `hookupEvent` enum in `hookup_tracing.dart` - rebuild, handler, createOnce, scopePush, etc.
-
-## Common Patterns
-
-
-
-### Async Initialization
-```dart
-class MyWidget extends WatchingWidget {
-  @override
-  Widget build(BuildContext context) {
-    final ready = allReady(
-      onReady: (context) => Navigator.pushReplacement(...),
-      timeout: Duration(seconds: 5),
-    );
-
-    if (!ready) return CircularProgressIndicator();
-    return MainContent();
-  }
-}
 ```
+Both devices simultaneously:
+
+  Peripheral role                     Central role
+  ────────────────                    ─────────────
+  addService(hookup GATT service)     startDiscovery(serviceUUIDs: [hookupUUID])
+  startAdvertising(serviceUUIDs: ...) │
+                                      │ onDiscovered → requestConnection
+                                      │ onConnected  → sendBytes(ownProfileBytes)
+  onReadRequest → respond with        │               → discoverGATT
+    _ownProfileBytes                  │               → readCharacteristic
+                                      │               → emit PeerDataReceived
+                                      ↓
+                                  NearbyController.decode → PeerCache.upsert
+                                                          → peerUpdates.add(peers)
+```
+
+### Key Design Decisions
+
+- **`_wantDiscovery` / `_wantAdvertising` flags** — callers set intent immediately; actual BLE calls are deferred until the manager reaches `poweredOn`. Handles startup race and power-cycle recovery.
+- **`_connectingPeers` + `_connectedPeers` sets** — BLE re-advertises every ~100ms; without these guards Android would issue hundreds of duplicate `connect()` calls.
+- **`ProfileRepository` injectable compressor** — `flutter_image_compress` is a platform plugin, untestable in unit tests. The constructor accepts an optional `PhotoCompressor` function; `create()` wires in the real compressor; tests use identity.
+- **`NearbyServiceInterface` boundary** — all BLE code lives behind this interface. Everything above it (NearbyController, UI) is unit-testable without hardware.
 
 ## Critical Rules for Modifications
 
@@ -527,33 +521,109 @@ class MyWidget extends WatchingWidget {
 4. Run tests and confirm passing
 5. Update this CLAUDE.md if new patterns emerge
 
-### When Adding Helper Functions
+## Current State (branch: `feature/nearby-connections`)
 
-- **Provide eventType**: Add new `hookupEvent` enum value if needed
-- **Document ordering requirement**: Make clear in docs/asserts if order matters
+### Working
+- Profile setup: photo, name, bio, optional fields (gender, age, height, body shape, hair colour)
+- Profile persistence across app restarts (SharedPreferences + local JPEG)
+- Photo compression to 96×96 JPEG @ 70% on save
+- BLE service: advertising, scanning, state-reactive startup, deduplication guards
+- Android ↔ macOS BLE discovery and connection confirmed working
+- Filter panel UI (gender, body shape, hair colour, age range, height range)
+- Broadcast toggle with profile completeness gate
+- 201 passing unit + widget tests
+
+### In Progress
+- **End-to-end profile exchange** — BLE connect succeeds but `*** PROFILE FOUND ***` log not yet confirmed. Verbose `[HOOKUP]` / `[BLE]` logging added to trace exactly where the exchange breaks. Check logs for:
+  - `[BLE] GATT services on ...:` — are the hookup service UUIDs listed?
+  - `[BLE] profile char read from ...: N B` — is N > 0?
+  - `[BLE] read request received — serving N B` — is N > 0 on the peripheral side?
+  - `[HOOKUP] *** PROFILE FOUND ***` — end-to-end success
+
+### Not Yet Built
+- Social login (Google + Apple Sign-In)
+- Nearby screen UI wired to `peerUpdates` stream (widget exists but not yet live-connected)
+- Radar pulse animation for empty state
+- iOS physical device testing
+- Peer profile card tap-to-expand
+- Broadcast state persistence across restarts
+
+## Next Steps
+
+1. **Confirm profile exchange end-to-end** — run both devices with logging and look for `*** PROFILE FOUND ***`. If the GATT service isn't found, the service UUID filter on one side may be wrong.
+
+2. **Wire `peerUpdates` to the UI** — `NearbyController.peerUpdates` emits `List<DiscoveredPeer>` on every cache change. `NearbyScreen` needs to consume this stream and rebuild with the peer list.
+
+3. **Re-save macOS profile** — any profile photo stored before the compression fix is still uncompressed (~3.9MB). Go to profile settings and tap Save to trigger `flutter_image_compress`. After this, `[HOOKUP] Own profile: photo=N B` should show N < 15360.
+
+4. **Social login** — add `google_sign_in` and `sign_in_with_apple` packages. Wire to onboarding flow before profile setup.
+
+5. **iOS setup** — Xcode signing, `flutter run` on physical iPhone, verify BLE permissions prompt appears and discovery works.
+
+6. **Broadcast state persistence** — store the broadcast toggle state in `SharedPreferences` so it survives app restarts.
 
 ## Dependencies
 
-- **flutter**: SDK
-- **flutter_nearby_connections_plus**: P2P discovery and data exchange (BLE + Wi-Fi Aware on Android, Multipeer Connectivity on iOS). Fork and maintain if the package becomes unmaintained.
+| Package | Purpose |
+|---|---|
+| `bluetooth_low_energy: ^6.2.1` | BLE central + peripheral roles for proximity discovery |
+| `flutter_image_compress: ^2.3.0` | Compress profile photos to 96×96 JPEG @ 70% before storage |
+| `image_picker: ^1.1.2` | Profile photo selection from camera/gallery |
+| `permission_handler: ^12.0.1` | BLE permissions on Android/iOS (not used on macOS) |
+| `shared_preferences: ^2.3.2` | Persist profile text fields across restarts |
+| `path_provider: ^2.1.5` | Locate app documents directory for photo file |
 
-**Compatibility**: Flutter >=3.0.0, Dart >=2.19.6 <4.0.0
+**Compatibility**: Flutter >=3.0.0, Dart >=3.0.0
 
 ## Common Issues & Solutions
 
+**BLE managers not ready on startup** — `startDiscovery`/`startAdvertising` called before BLE reaches `poweredOn`. Fixed: `BleNearbyService` records intent with `_wantDiscovery`/`_wantAdvertising` and defers the actual call until the state stream fires `poweredOn`. Also resumes automatically if BLE power-cycles.
 
+**Android `PlatformException` status 257 (GATT_CONN_FAIL_ESTABLISH)** — caused by calling `connect()` multiple times while one is already in flight (Android re-advertises every ~100ms). Fixed: `_connectingPeers` set in `BleNearbyService` guards against duplicate connect attempts.
+
+**Android infinite reconnect loop** — after connecting, BLE kept re-discovering and re-connecting the same peer. Fixed: `_connectedPeers` set prevents reconnecting an already-connected peer. Guard clears on disconnect.
+
+**`ProfileBundleTooLargeException` crash** — uncompressed profile photo (~3.9MB) exceeded the 15KB bundle limit. Fixed two ways: (1) `ProfileRepository.save` now compresses photos via `flutter_image_compress` before writing to disk; (2) `NearbyController` catches the exception and logs rather than crashing. If the stored photo is still large after upgrading, re-save the profile to trigger compression.
+
+**macOS `permission_handler` crash** — `MissingPluginException` because `permission_handler` doesn't support macOS. Fixed: `_requestPermissions()` in `main.dart` returns early unless the platform is Android or iOS.
+
+**macOS `RangeSlider` disposal crash** — `AnimationController.reverse() after dispose()` when a hover event fires during widget teardown. Fixed: `_RangeSection` in `filter_panel.dart` uses `Offstage` instead of conditional widget removal, keeping the render object alive.
 
 ## File Structure
 
 ```
 lib/
-├── hookup.dart              # Main export, global di/sl instances
-├── src/
-    ├── elements.dart          # Element global _activehookupState
-    ├── hookup_state.dart    # Core _hookupState class, _WatchEntry
-    ├── hookup.dart          # All watch*() and register*() global functions
-    ├── hookup_tracing.dart  # Tracing infrastructure, hookupEvent enum
-    └── widgets.dart           # 
+├── main.dart                              # App entry, state wiring, profile persistence
+└── src/
+    ├── nearby_service_interface.dart      # Abstract BLE/proximity interface
+    ├── ble_nearby_service.dart            # BLE implementation (central + peripheral)
+    ├── nearby_controller.dart             # Orchestrates events → cache → UI stream
+    ├── nearby_event.dart                  # Sealed event types (Discovered/Connected/etc.)
+    ├── peer_cache.dart                    # endpointId → DiscoveredPeer, eviction on disconnect
+    ├── peer_filter.dart                   # Filter model + constants (gender, age, height, etc.)
+    ├── profile_bundle_codec.dart          # Binary encode/decode for BLE payload (<15KB)
+    ├── profile_model.dart                 # ProfileModel, isComplete gate
+    ├── profile_repository.dart            # SharedPrefs + local JPEG, injectable compressor
+    └── widgets/
+        ├── broadcast_toggle.dart          # Toggle with profile completeness gate
+        ├── filter_panel.dart              # Collapsible filter UI
+        ├── nearby_screen.dart             # Main screen: own profile + peer grid
+        └── profile_setup_screen.dart      # Photo/name/bio/optional fields form
+
+test/
+├── unit/
+│   ├── ble_nearby_service_test.dart       # BLE state machine, connection dedup
+│   ├── nearby_controller_test.dart        # Event handling, profile exchange logic
+│   ├── peer_cache_test.dart               # Cache eviction, deduplication
+│   ├── peer_filter_test.dart              # Filter logic
+│   ├── profile_bundle_codec_test.dart     # Encode/decode round-trips
+│   ├── profile_model_test.dart            # isComplete gate
+│   └── profile_repository_test.dart       # Persistence round-trips, compression
+└── widget/
+    ├── broadcast_toggle_test.dart         # Toggle disabled until profile complete
+    ├── filter_panel_test.dart             # Filter UI interactions
+    ├── nearby_screen_test.dart            # Empty state, peer grid
+    └── profile_setup_screen_test.dart     # Form validation, save callback
 ```
 
 ## Publishing Checklist

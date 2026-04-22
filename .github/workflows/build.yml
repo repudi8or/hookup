@@ -54,6 +54,10 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Set version from run number
+        run: |
+          sed -i "s/^version:.*/version: 0.0.${{ github.run_number }}+${{ github.run_number }}/" pubspec.yaml
+
       - name: Build debug APK
         run: flutter build apk --debug
 
