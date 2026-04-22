@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:bluetooth_low_energy/bluetooth_low_energy.dart';
+import 'package:flutter/foundation.dart';
 
 import 'nearby_event.dart';
 import 'nearby_service_interface.dart';
@@ -17,7 +18,10 @@ import 'nearby_service_interface.dart';
 ///    [profileCharUUID] characteristic, emitting [PeerDataReceived].
 /// 4. Peripheral side serves [_ownProfileBytes] in response to read requests.
 ///
-/// Works across Android, iOS, and macOS (all support BLE peripheral mode).
+/// BLE managers may not be ready immediately on startup. [startDiscovery] and
+/// [startAdvertising] record intent and defer the actual platform call until
+/// the manager reaches [BluetoothLowEnergyState.poweredOn]. If the manager
+/// powers off and back on, discovery/advertising resumes automatically.
 class BleNearbyService implements NearbyServiceInterface {
   static final serviceUUID = UUID.fromString(
     'f47ac10b-58cc-4372-a567-0e02b2c3d479',
@@ -33,9 +37,17 @@ class BleNearbyService implements NearbyServiceInterface {
   Uint8List _ownProfileBytes = Uint8List(0);
   final Map<String, Peripheral> _peripheralMap = {};
 
+  bool _wantDiscovery = false;
+  bool _wantAdvertising = false;
+  String? _advertisingName;
+  bool _serviceAdded = false;
+
   StreamSubscription<DiscoveredEventArgs>? _discoveredSub;
   StreamSubscription<PeripheralConnectionStateChangedEventArgs>? _connectionSub;
   StreamSubscription<GATTCharacteristicReadRequestedEventArgs>? _readSub;
+  StreamSubscription<BluetoothLowEnergyStateChangedEventArgs>? _centralStateSub;
+  StreamSubscription<BluetoothLowEnergyStateChangedEventArgs>?
+  _peripheralStateSub;
 
   BleNearbyService({
     CentralManager? centralManager,
@@ -45,25 +57,70 @@ class BleNearbyService implements NearbyServiceInterface {
 
   /// Must be called once after construction and before any other method.
   Future<void> initialize() async {
-    final profileChar = GATTCharacteristic.mutable(
-      uuid: profileCharUUID,
-      properties: [GATTCharacteristicProperty.read],
-      permissions: [GATTCharacteristicPermission.read],
-      descriptors: [],
-    );
-    final service = GATTService(
-      uuid: serviceUUID,
-      isPrimary: true,
-      includedServices: [],
-      characteristics: [profileChar],
-    );
-    await _peripheral.addService(service);
-
     _discoveredSub = _central.discovered.listen(_onDiscovered);
     _connectionSub = _central.connectionStateChanged.listen(
       _onConnectionStateChanged,
     );
     _readSub = _peripheral.characteristicReadRequested.listen(_onReadRequested);
+
+    _centralStateSub = _central.stateChanged.listen(
+      (e) => _onCentralState(e.state).ignore(),
+    );
+    _peripheralStateSub = _peripheral.stateChanged.listen(
+      (e) => _onPeripheralState(e.state).ignore(),
+    );
+
+    // Apply current state in case managers are already powered on.
+    await _onCentralState(_central.state);
+    await _onPeripheralState(_peripheral.state);
+  }
+
+  Future<void> _onCentralState(BluetoothLowEnergyState state) async {
+    debugPrint('[BLE] central → $state');
+    if (state == BluetoothLowEnergyState.unauthorized && Platform.isAndroid) {
+      await _central.authorize();
+    } else if (state == BluetoothLowEnergyState.poweredOn && _wantDiscovery) {
+      await _central.startDiscovery(serviceUUIDs: [serviceUUID]);
+    }
+  }
+
+  Future<void> _onPeripheralState(BluetoothLowEnergyState state) async {
+    debugPrint('[BLE] peripheral → $state');
+    if (state == BluetoothLowEnergyState.unauthorized && Platform.isAndroid) {
+      await _peripheral.authorize();
+    } else if (state == BluetoothLowEnergyState.poweredOn && _wantAdvertising) {
+      await _doStartAdvertising();
+    }
+    if (state == BluetoothLowEnergyState.poweredOff ||
+        state == BluetoothLowEnergyState.unknown) {
+      // Service registration is cleared when the peripheral powers off.
+      _serviceAdded = false;
+    }
+  }
+
+  Future<void> _doStartAdvertising() async {
+    if (!_serviceAdded) {
+      final profileChar = GATTCharacteristic.mutable(
+        uuid: profileCharUUID,
+        properties: [GATTCharacteristicProperty.read],
+        permissions: [GATTCharacteristicPermission.read],
+        descriptors: [],
+      );
+      final service = GATTService(
+        uuid: serviceUUID,
+        isPrimary: true,
+        includedServices: [],
+        characteristics: [profileChar],
+      );
+      await _peripheral.addService(service);
+      _serviceAdded = true;
+    }
+    await _peripheral.startAdvertising(
+      Advertisement(
+        name: _advertisingName ?? 'hookup',
+        serviceUUIDs: [serviceUUID],
+      ),
+    );
   }
 
   void _onDiscovered(DiscoveredEventArgs args) {
@@ -99,20 +156,34 @@ class BleNearbyService implements NearbyServiceInterface {
   Stream<NearbyEvent> get events => _eventCtrl.stream;
 
   @override
-  Future<void> startAdvertising(String displayName) =>
-      _peripheral.startAdvertising(
-        Advertisement(name: displayName, serviceUUIDs: [serviceUUID]),
-      );
+  Future<void> startAdvertising(String displayName) async {
+    _wantAdvertising = true;
+    _advertisingName = displayName;
+    if (_peripheral.state == BluetoothLowEnergyState.poweredOn) {
+      await _doStartAdvertising();
+    }
+  }
 
   @override
-  Future<void> stopAdvertising() => _peripheral.stopAdvertising();
+  Future<void> stopAdvertising() async {
+    _wantAdvertising = false;
+    _advertisingName = null;
+    await _peripheral.stopAdvertising();
+  }
 
   @override
-  Future<void> startDiscovery() =>
-      _central.startDiscovery(serviceUUIDs: [serviceUUID]);
+  Future<void> startDiscovery() async {
+    _wantDiscovery = true;
+    if (_central.state == BluetoothLowEnergyState.poweredOn) {
+      await _central.startDiscovery(serviceUUIDs: [serviceUUID]);
+    }
+  }
 
   @override
-  Future<void> stopDiscovery() => _central.stopDiscovery();
+  Future<void> stopDiscovery() async {
+    _wantDiscovery = false;
+    await _central.stopDiscovery();
+  }
 
   @override
   Future<void> requestConnection(String endpointId, String displayName) async {
@@ -165,6 +236,8 @@ class BleNearbyService implements NearbyServiceInterface {
     await _discoveredSub?.cancel();
     await _connectionSub?.cancel();
     await _readSub?.cancel();
+    await _centralStateSub?.cancel();
+    await _peripheralStateSub?.cancel();
     await _eventCtrl.close();
   }
 }

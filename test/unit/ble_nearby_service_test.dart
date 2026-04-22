@@ -101,6 +101,10 @@ void main() {
   late StreamController<PeripheralConnectionStateChangedEventArgs>
   connectionCtrl;
   late StreamController<GATTCharacteristicReadRequestedEventArgs> readCtrl;
+  late StreamController<BluetoothLowEnergyStateChangedEventArgs>
+  centralStateCtrl;
+  late StreamController<BluetoothLowEnergyStateChangedEventArgs>
+  peripheralStateCtrl;
   late BleNearbyService service;
 
   setUp(() async {
@@ -109,6 +113,8 @@ void main() {
     discoveredCtrl = StreamController.broadcast();
     connectionCtrl = StreamController.broadcast();
     readCtrl = StreamController.broadcast();
+    centralStateCtrl = StreamController.broadcast();
+    peripheralStateCtrl = StreamController.broadcast();
 
     when(() => central.discovered).thenAnswer((_) => discoveredCtrl.stream);
     when(
@@ -117,6 +123,12 @@ void main() {
     when(
       () => peripheral.characteristicReadRequested,
     ).thenAnswer((_) => readCtrl.stream);
+    when(() => central.stateChanged).thenAnswer((_) => centralStateCtrl.stream);
+    when(
+      () => peripheral.stateChanged,
+    ).thenAnswer((_) => peripheralStateCtrl.stream);
+    when(() => central.state).thenReturn(BluetoothLowEnergyState.poweredOn);
+    when(() => peripheral.state).thenReturn(BluetoothLowEnergyState.poweredOn);
     when(() => peripheral.addService(any())).thenAnswer((_) async {});
     when(
       () => central.startDiscovery(serviceUUIDs: any(named: 'serviceUUIDs')),
@@ -138,10 +150,16 @@ void main() {
     await discoveredCtrl.close();
     await connectionCtrl.close();
     await readCtrl.close();
+    await centralStateCtrl.close();
+    await peripheralStateCtrl.close();
     await service.dispose();
   });
 
   Future<void> pump() => Future.microtask(() {});
+
+  // Drains the full microtask + timer queue — needed when an async chain has
+  // multiple awaits before the expected side-effect fires.
+  Future<void> pumpAll() => Future<void>.delayed(Duration.zero);
 
   group('BleNearbyService — discovery', () {
     test('startDiscovery delegates to CentralManager', () async {
@@ -327,6 +345,97 @@ void main() {
   group('BleNearbyService — acceptConnection', () {
     test('acceptConnection is a no-op (BLE auto-accepts)', () async {
       await expectLater(service.acceptConnection('any-id'), completes);
+    });
+  });
+
+  group('BleNearbyService — state handling', () {
+    test('startDiscovery defers when central is not poweredOn', () async {
+      when(() => central.state).thenReturn(BluetoothLowEnergyState.poweredOff);
+
+      await service.startDiscovery();
+
+      verifyNever(
+        () => central.startDiscovery(serviceUUIDs: any(named: 'serviceUUIDs')),
+      );
+    });
+
+    test(
+      'discovery auto-starts when central transitions to poweredOn',
+      () async {
+        when(
+          () => central.state,
+        ).thenReturn(BluetoothLowEnergyState.poweredOff);
+        await service.startDiscovery();
+        verifyNever(
+          () =>
+              central.startDiscovery(serviceUUIDs: any(named: 'serviceUUIDs')),
+        );
+
+        when(() => central.state).thenReturn(BluetoothLowEnergyState.poweredOn);
+        centralStateCtrl.add(
+          BluetoothLowEnergyStateChangedEventArgs(
+            BluetoothLowEnergyState.poweredOn,
+          ),
+        );
+        await pumpAll();
+
+        verify(
+          () =>
+              central.startDiscovery(serviceUUIDs: any(named: 'serviceUUIDs')),
+        ).called(1);
+      },
+    );
+
+    test('startAdvertising defers when peripheral is not poweredOn', () async {
+      when(
+        () => peripheral.state,
+      ).thenReturn(BluetoothLowEnergyState.poweredOff);
+
+      await service.startAdvertising('hookup');
+
+      verifyNever(() => peripheral.startAdvertising(any()));
+    });
+
+    test(
+      'advertising auto-starts (with addService) when peripheral transitions to poweredOn',
+      () async {
+        when(
+          () => peripheral.state,
+        ).thenReturn(BluetoothLowEnergyState.poweredOff);
+        await service.startAdvertising('hookup');
+        verifyNever(() => peripheral.startAdvertising(any()));
+
+        when(
+          () => peripheral.state,
+        ).thenReturn(BluetoothLowEnergyState.poweredOn);
+        peripheralStateCtrl.add(
+          BluetoothLowEnergyStateChangedEventArgs(
+            BluetoothLowEnergyState.poweredOn,
+          ),
+        );
+        await pumpAll();
+
+        verify(() => peripheral.addService(any())).called(1);
+        verify(() => peripheral.startAdvertising(any())).called(1);
+      },
+    );
+
+    test('stopDiscovery prevents auto-restart on power-on', () async {
+      when(() => central.state).thenReturn(BluetoothLowEnergyState.poweredOff);
+      await service.startDiscovery();
+      await service.stopDiscovery();
+
+      when(() => central.state).thenReturn(BluetoothLowEnergyState.poweredOn);
+      centralStateCtrl.add(
+        BluetoothLowEnergyStateChangedEventArgs(
+          BluetoothLowEnergyState.poweredOn,
+        ),
+      );
+      await pumpAll();
+
+      verifyNever(
+        () => central.startDiscovery(serviceUUIDs: any(named: 'serviceUUIDs')),
+      );
     });
   });
 }
