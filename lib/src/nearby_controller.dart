@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'nearby_event.dart';
 import 'nearby_service_interface.dart';
 import 'peer_cache.dart';
@@ -71,12 +73,18 @@ class NearbyController {
         _service.acceptConnection(endpointId);
 
       case PeerConnected(:final endpointId):
-        final bundle = _ownBundle();
-        final bytes = ProfileBundleCodec.encode(
-          bundle.profile,
-          bundle.photoBytes,
-        );
-        _service.sendBytes(endpointId, bytes);
+        try {
+          final bundle = _ownBundle();
+          final bytes = ProfileBundleCodec.encode(
+            bundle.profile,
+            bundle.photoBytes,
+          );
+          _service.sendBytes(endpointId, bytes);
+        } on ProfileBundleTooLargeException catch (e) {
+          debugPrint(
+            '[NearbyController] own bundle too large, not sending: $e',
+          );
+        }
 
       case PeerDataReceived(:final endpointId, :final bytes):
         try {

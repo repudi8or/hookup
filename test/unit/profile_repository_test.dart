@@ -196,4 +196,66 @@ void main() {
       expect(loaded!.profile.isComplete, isFalse);
     });
   });
+
+  group('ProfileRepository photo compression', () {
+    test('save passes photo bytes through the injected compressor', () async {
+      final calls = <Uint8List>[];
+      final compressedBytes = Uint8List.fromList([9, 8, 7]);
+      final prefs = await SharedPreferences.getInstance();
+
+      final repoWithCompressor = ProfileRepository(
+        prefs,
+        photoFile,
+        compressor: (bytes) async {
+          calls.add(bytes);
+          return compressedBytes;
+        },
+      );
+
+      final original = Uint8List.fromList([1, 2, 3, 4, 5]);
+      await repoWithCompressor.save(
+        ProfileBundle(
+          profile: const ProfileModel(
+            name: 'Alice',
+            bio: 'Hey',
+            photoUrl: 'local',
+          ),
+          photoBytes: original,
+        ),
+      );
+
+      expect(calls, hasLength(1));
+      expect(calls.first, equals(original));
+
+      final loaded = await repoWithCompressor.load();
+      expect(loaded!.photoBytes, equals(compressedBytes));
+    });
+
+    test('compressor is not called when photoBytes is empty', () async {
+      var called = false;
+      final prefs = await SharedPreferences.getInstance();
+
+      final repoWithCompressor = ProfileRepository(
+        prefs,
+        photoFile,
+        compressor: (_) async {
+          called = true;
+          return Uint8List(0);
+        },
+      );
+
+      await repoWithCompressor.save(
+        ProfileBundle(
+          profile: const ProfileModel(
+            name: 'Alice',
+            bio: 'Hey',
+            photoUrl: 'local',
+          ),
+          photoBytes: Uint8List(0),
+        ),
+      );
+
+      expect(called, isFalse);
+    });
+  });
 }

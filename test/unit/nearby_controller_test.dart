@@ -112,6 +112,25 @@ void main() {
       await pump();
       expect(cache.contains('ep1'), isFalse);
     });
+
+    test(
+      'does not throw and does not send when own bundle exceeds size limit',
+      () async {
+        ownBundle = ProfileBundle(
+          profile: const ProfileModel(
+            name: 'Me',
+            bio: 'My bio',
+            photoUrl: null,
+          ),
+          photoBytes: Uint8List(kMaxProfileBundleBytes + 1),
+        );
+
+        events.add(const PeerConnected(endpointId: 'ep1'));
+        await pump();
+
+        verifyNever(() => service.sendBytes(any(), any()));
+      },
+    );
   });
 
   group('NearbyController — disconnection', () {

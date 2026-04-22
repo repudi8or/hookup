@@ -314,6 +314,30 @@ void main() {
       verify(() => central.connect(peer)).called(1);
     });
 
+    test(
+      'requestConnection on an already-connected peer does not call connect again',
+      () async {
+        await service.requestConnection(epId, 'hookup');
+        connectionCtrl.add(
+          PeripheralConnectionStateChangedEventArgs(
+            peer,
+            ConnectionState.connected,
+          ),
+        );
+        await pump();
+
+        // BLE re-advertises; peer is discovered again.
+        discoveredCtrl.add(
+          DiscoveredEventArgs(peer, -70, _makeAdvertisement()),
+        );
+        await pump();
+
+        await service.requestConnection(epId, 'hookup');
+
+        verify(() => central.connect(peer)).called(1);
+      },
+    );
+
     test('connect exception is caught and does not propagate', () async {
       when(() => central.connect(peer)).thenThrow(
         PlatformException(
