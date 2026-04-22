@@ -37,16 +37,9 @@ The broadcast toggle must remain disabled and visually indicate why (e.g. "Compl
 
 ## Communication Technology
 
-### Strategy: Two-Phase Proximity
+### Current Strategy: BLE Only
 
-The app uses a two-phase approach for maximum range and cross-platform compatibility:
-
-1. **Discovery phase** — BLE advertising: low power, universally supported, passively detectable
-2. **Data exchange phase** — Wi-Fi Aware (Android) / AWDL via Multipeer Connectivity (iOS): higher bandwidth, longer range (~200-300m)
-
-In practice, the chosen Flutter package handles the BLE → Wi-Fi upgrade automatically under the hood.
-
-### Flutter Package: `bluetooth_low_energy`
+The app currently uses BLE for both discovery and data exchange. This covers the primary use case (a venue, bar, or room — 30–100m) without any platform-specific Wi-Fi code.
 
 **Package**: `bluetooth_low_energy: ^6.2.1`
 - Supports Android, iOS, macOS
@@ -54,15 +47,70 @@ In practice, the chosen Flutter package handles the BLE → Wi-Fi upgrade automa
 - On Android: requires `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `BLUETOOTH_ADVERTISE` permissions (handled by `permission_handler`)
 - On macOS: requires `com.apple.security.device.bluetooth` sandbox entitlement
 
-`flutter_nearby_connections_plus` was evaluated but abandoned — it required patching internal Kotlin/iOS APIs that were removed in newer SDKs, and the package is not well maintained.
-
-### Strategy
-
 Each device simultaneously:
 1. **Advertises** a GATT peripheral with service UUID `f47ac10b-58cc-4372-a567-0e02b2c3d479`
 2. **Scans** for peripherals advertising that same UUID
 
-On discovery, the central role device connects and reads the remote's profile characteristic (`f47ac10b-58cc-4372-a567-0e02b2c3d480`). The peripheral serves its own profile bytes in response to read requests.
+On discovery, the central role device connects and reads the remote's profile characteristic (`f47ac10b-58cc-4372-a567-0e02b2c3d480`). The peripheral serves its own profile bytes in response to read requests. Multi-chunk reads (BLE "Read Long" procedure) are supported — `_onReadRequested` slices `_ownProfileBytes` at `args.request.offset` so profiles larger than the negotiated MTU (~512 bytes) are served correctly across multiple requests.
+
+### Future Extension: Wi-Fi Range (~200–300m)
+
+To extend range beyond BLE, the intended architecture is:
+
+1. **BLE advertising** — discovery only (current)
+2. **Wi-Fi Aware (Android) / AWDL via Multipeer Connectivity (iOS)** — data exchange at 200–300m
+
+There is no cross-platform Wi-Fi P2P solution that works on both Android and iOS without a shared Wi-Fi network — the platforms use entirely different radio stacks:
+
+| Transport | Android | iOS | Cross-platform |
+|---|---|---|---|
+| Wi-Fi Aware (NAN) | Android 8+ | No | No |
+| AWDL / Multipeer Connectivity | No | Yes | No |
+| Wi-Fi Direct (P2P) | Yes | No | No |
+| BLE | Yes | Yes | **Yes** |
+
+The only cross-platform abstraction that bridges both is **Google Nearby Connections**, which routes through Wi-Fi Aware on Android and Multipeer Connectivity on iOS behind a single API. `flutter_nearby_connections_plus` wraps this SDK.
+
+**Why we abandoned it and what a revival requires:**
+
+`flutter_nearby_connections_plus` was evaluated and abandoned. It required patching Kotlin internals (`Registrar` API removed in newer Android SDK versions) and the package is unmaintained. To revive Wi-Fi range:
+
+1. **Fork `flutter_nearby_connections_plus`** (or write a fresh plugin from scratch)
+2. **Fix the Android side** — replace all usages of the removed `io.flutter.plugin.common.PluginRegistry.Registrar` API with the current `FlutterPlugin` / `ActivityAware` plugin lifecycle. This is native Kotlin work (~1–2 days).
+3. **Verify the iOS side** — Multipeer Connectivity bindings were less broken but need auditing against the current Flutter iOS plugin API.
+4. **Replace `NearbyServiceInterface` implementation** — swap `BleNearbyService` for a `NearbyConnectionsService` that implements the same interface. `NearbyController` and all tests remain unchanged.
+
+Until that work is done, BLE-only is the correct choice. The `NearbyServiceInterface` abstraction boundary is already designed to make this swap a drop-in replacement.
+
+### Future Extension: Short-Link Profile Exchange (Internet Required)
+
+An alternative to Wi-Fi for richer profile data is to exchange a short URL via BLE instead of the full profile bundle. The central reads a small characteristic containing a link (e.g. `https://hookup.app/p/abc123`) and opens it to load an extended profile from a server.
+
+**How it would work:**
+1. Each user has a server-side profile at a short URL, generated on sign-in
+2. The BLE peripheral serves the short URL (< 64 bytes — well within a single MTU read)
+3. On connection, central reads the URL and fetches the full profile over HTTPS
+4. The full profile can include high-res photos, links, and richer fields — not constrained by BLE payload limits
+
+**Trade-offs vs. current BLE bundle approach:**
+
+| | BLE bundle (current) | Short-link |
+|---|---|---|
+| Internet required | No | Yes |
+| Profile size | <15KB | Unlimited |
+| Latency | ~1–2s (BLE read) | ~1–2s (BLE read) + HTTP fetch |
+| Privacy | Local only | Server holds profile data |
+| Works offline | Yes | No |
+
+**Caveats:**
+- Requires a backend (auth, profile storage, URL generation)
+- Profile data leaves the device and is stored server-side — changes the privacy model significantly
+- The two approaches are not mutually exclusive: BLE bundle for offline/anonymous use; short-link opt-in for users who want richer profiles and are willing to create an account
+
+**Implementation sketch:**
+- Add a `profileUrl` field to the GATT service as a second characteristic
+- `NearbyController` reads it and emits a `PeerLinkReceived` event alongside (or instead of) `PeerDataReceived`
+- The UI fetches and caches the remote profile; falls back to the BLE bundle if the fetch fails or there is no network
 
 ### Profile Exchange
 
@@ -100,25 +148,13 @@ Use a single bytes payload (max ~32KB) to keep the transfer simple and atomic. F
 - Hard reject if >15KB after compression
 - Use `flutter_image_compress` to enforce
 
-**Peer caching** — Nearby Connections assigns each device an `endpointId`. Cache received profiles by `endpointId` to avoid re-requesting from already-seen devices. Evict on disconnect or after a timeout:
+**Peer caching** — BLE assigns each peripheral a UUID used as `endpointId`. Cache received profiles by `endpointId` to avoid re-requesting from already-seen devices. Evict on disconnect:
 ```dart
 Map<String, DiscoveredPeer> _peerCache = {};
 // endpointId → { profileImage, profileData, lastSeen }
 ```
 
 **Privacy** — all profile data is unencrypted and visible to any nearby device running the app. The profile should only contain what a user consciously wants to broadcast publicly. Surface this clearly during onboarding.
-
-### Technology Comparison (researched options)
-
-| Technology | Range | Battery | Android | iOS | No Internet |
-|---|---|---|---|---|---|
-| BLE Advertising | ~30–100m | Low | Yes | Yes | Yes |
-| Wi-Fi Aware (NAN) | ~200–300m | Medium | Android 8+ | No | Yes |
-| Multipeer Connectivity | ~200m | Medium | No | Yes | Yes |
-| Google Nearby Connections | ~200–300m | Medium | Yes | Yes | Yes |
-| 5G ProSe/Sidelink | km-range | — | Rare | No | Yes |
-
-Google Nearby Connections was chosen because it abstracts Wi-Fi Aware (Android) and Multipeer Connectivity (iOS) behind a single cross-platform API.
 
 ## Git Workflow
 

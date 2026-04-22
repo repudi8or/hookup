@@ -39,7 +39,6 @@ class BleNearbyService implements NearbyServiceInterface {
 
   bool _wantDiscovery = false;
   bool _wantAdvertising = false;
-  String? _advertisingName;
   bool _serviceAdded = false;
   final Set<String> _connectingPeers = {};
   final Set<String> _connectedPeers = {};
@@ -126,11 +125,12 @@ class BleNearbyService implements NearbyServiceInterface {
         debugPrint('[BLE] GATT service added');
       }
       debugPrint('[BLE] starting advertising…');
+      // name intentionally omitted: passing a name on Android calls
+      // BluetoothAdapter.setName() and waits for ACTION_LOCAL_NAME_CHANGED,
+      // which never fires if the name hasn't changed — hanging the Future.
+      // The service UUID is the real discriminator; the name is cosmetic.
       await _peripheral.startAdvertising(
-        Advertisement(
-          name: _advertisingName ?? 'hookup',
-          serviceUUIDs: [serviceUUID],
-        ),
+        Advertisement(serviceUUIDs: [serviceUUID]),
       );
       debugPrint('[BLE] advertising started');
     } catch (e) {
@@ -163,11 +163,15 @@ class BleNearbyService implements NearbyServiceInterface {
   }
 
   void _onReadRequested(GATTCharacteristicReadRequestedEventArgs args) {
+    final offset = args.request.offset;
+    final slice = offset < _ownProfileBytes.length
+        ? _ownProfileBytes.sublist(offset)
+        : Uint8List(0);
     debugPrint(
-      '[BLE] read request received — serving ${_ownProfileBytes.length} bytes',
+      '[BLE] read request offset=$offset — serving ${slice.length} of ${_ownProfileBytes.length} bytes',
     );
     _peripheral
-        .respondReadRequestWithValue(args.request, value: _ownProfileBytes)
+        .respondReadRequestWithValue(args.request, value: slice)
         .ignore();
   }
 
@@ -180,7 +184,6 @@ class BleNearbyService implements NearbyServiceInterface {
       '[BLE] startAdvertising called (peripheral=${_peripheral.state})',
     );
     _wantAdvertising = true;
-    _advertisingName = displayName;
     if (_peripheral.state == BluetoothLowEnergyState.poweredOn) {
       await _doStartAdvertising();
     } else {
@@ -191,7 +194,6 @@ class BleNearbyService implements NearbyServiceInterface {
   @override
   Future<void> stopAdvertising() async {
     _wantAdvertising = false;
-    _advertisingName = null;
     await _peripheral.stopAdvertising();
   }
 
