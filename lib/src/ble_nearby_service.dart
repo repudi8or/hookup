@@ -163,6 +163,9 @@ class BleNearbyService implements NearbyServiceInterface {
   }
 
   void _onReadRequested(GATTCharacteristicReadRequestedEventArgs args) {
+    debugPrint(
+      '[BLE] read request received — serving ${_ownProfileBytes.length} bytes',
+    );
     _peripheral
         .respondReadRequestWithValue(args.request, value: _ownProfileBytes)
         .ignore();
@@ -242,24 +245,39 @@ class BleNearbyService implements NearbyServiceInterface {
   /// [PeerDataReceived] on success.
   @override
   Future<void> sendBytes(String endpointId, Uint8List bytes) async {
+    debugPrint(
+      '[BLE] sendBytes: storing ${bytes.length} B as own profile, will read remote',
+    );
     _ownProfileBytes = bytes;
     await _readRemoteProfile(endpointId);
   }
 
   Future<void> _readRemoteProfile(String endpointId) async {
     final p = _peripheralMap[endpointId];
-    if (p == null) return;
+    if (p == null) {
+      debugPrint('[BLE] _readRemoteProfile: $endpointId not in peripheral map');
+      return;
+    }
+    debugPrint('[BLE] discovering GATT on $endpointId…');
     try {
       final services = await _central.discoverGATT(p);
+      debugPrint(
+        '[BLE] GATT services on $endpointId (${services.length}): '
+        '${services.map((s) => s.uuid).join(', ')}',
+      );
       final svc = services.firstWhere(
         (s) => s.uuid.toString() == serviceUUID.toString(),
         orElse: () => throw StateError('hookup service not found on peer'),
       );
+      debugPrint('[BLE] hookup service found — reading profile char…');
       final char = svc.characteristics.firstWhere(
         (c) => c.uuid.toString() == profileCharUUID.toString(),
         orElse: () => throw StateError('profile char not found on peer'),
       );
       final profileBytes = await _central.readCharacteristic(p, char);
+      debugPrint(
+        '[BLE] profile char read from $endpointId: ${profileBytes.length} B',
+      );
       _eventCtrl.add(
         PeerDataReceived(endpointId: endpointId, bytes: profileBytes),
       );
