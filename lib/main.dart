@@ -1,6 +1,5 @@
 import 'dart:math';
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -136,6 +135,12 @@ class _HookupHomeState extends State<HookupHome> {
   }
 
   Future<void> _requestPermissions() async {
+    // permission_handler is not supported on macOS or Linux.
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+
     final statuses = await [
       Permission.bluetooth,
       Permission.bluetoothScan,
