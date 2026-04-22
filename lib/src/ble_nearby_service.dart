@@ -41,6 +41,7 @@ class BleNearbyService implements NearbyServiceInterface {
   bool _wantAdvertising = false;
   String? _advertisingName;
   bool _serviceAdded = false;
+  final Set<String> _connectingPeers = {};
 
   StreamSubscription<DiscoveredEventArgs>? _discoveredSub;
   StreamSubscription<PeripheralConnectionStateChangedEventArgs>? _connectionSub;
@@ -149,6 +150,7 @@ class BleNearbyService implements NearbyServiceInterface {
   ) {
     final endpointId = args.peripheral.uuid.toString();
     debugPrint('[BLE] connection state $endpointId → ${args.state}');
+    _connectingPeers.remove(endpointId);
     if (args.state == ConnectionState.connected) {
       _eventCtrl.add(PeerConnected(endpointId: endpointId));
     } else {
@@ -211,8 +213,21 @@ class BleNearbyService implements NearbyServiceInterface {
 
   @override
   Future<void> requestConnection(String endpointId, String displayName) async {
+    if (_connectingPeers.contains(endpointId)) {
+      debugPrint(
+        '[BLE] requestConnection $endpointId — already connecting, skipped',
+      );
+      return;
+    }
     final p = _peripheralMap[endpointId];
-    if (p != null) await _central.connect(p);
+    if (p == null) return;
+    _connectingPeers.add(endpointId);
+    try {
+      await _central.connect(p);
+    } catch (e) {
+      debugPrint('[BLE] connect $endpointId error: $e');
+      _connectingPeers.remove(endpointId);
+    }
   }
 
   @override

@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:bluetooth_low_energy/bluetooth_low_energy.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:hookup/src/ble_nearby_service.dart';
@@ -269,6 +269,60 @@ void main() {
     test('requestConnection on unknown endpointId does nothing', () async {
       await service.requestConnection('unknown-id', 'hookup');
       verifyNever(() => central.connect(any()));
+    });
+
+    test(
+      'duplicate requestConnection while connecting does not call connect twice',
+      () async {
+        // Simulate connect hanging (never completes) so we can fire a second
+        // requestConnection before the first resolves.
+        final completer = Completer<void>();
+        when(() => central.connect(peer)).thenAnswer((_) => completer.future);
+
+        // Fire two concurrent connection requests.
+        final f1 = service.requestConnection(epId, 'hookup');
+        final f2 = service.requestConnection(epId, 'hookup');
+
+        completer.complete();
+        await f1;
+        await f2;
+
+        verify(() => central.connect(peer)).called(1);
+      },
+    );
+
+    test('requestConnection allowed again after peer disconnects', () async {
+      // First connection attempt.
+      await service.requestConnection(epId, 'hookup');
+      verify(() => central.connect(peer)).called(1);
+
+      // Simulate disconnect clears the in-progress guard.
+      connectionCtrl.add(
+        PeripheralConnectionStateChangedEventArgs(
+          peer,
+          ConnectionState.disconnected,
+        ),
+      );
+      await pump();
+
+      // Re-discover the peer so _peripheralMap is repopulated.
+      discoveredCtrl.add(DiscoveredEventArgs(peer, -70, _makeAdvertisement()));
+      await pump();
+
+      // Second connection attempt should go through.
+      await service.requestConnection(epId, 'hookup');
+      verify(() => central.connect(peer)).called(1);
+    });
+
+    test('connect exception is caught and does not propagate', () async {
+      when(() => central.connect(peer)).thenThrow(
+        PlatformException(
+          code: 'IllegalStateException',
+          message: 'Connect failed with status: 257',
+        ),
+      );
+
+      await expectLater(service.requestConnection(epId, 'hookup'), completes);
     });
   });
 
